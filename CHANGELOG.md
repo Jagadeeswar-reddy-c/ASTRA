@@ -7,6 +7,8 @@ versioning: [SemVer](https://semver.org/).
 
 ## [0.5.1] — 2026-09-24
 
+New-user acceptance test PASS from a fresh clone (report: docs/05-testing/reports/new-user-test.md).
+
 ### Added
 - docs/GETTING-STARTED.md: new-user guide (install, run, check, use via the OpenAI API, run
   permanently, add GPUs, update/uninstall, troubleshooting).
@@ -14,6 +16,7 @@ versioning: [SemVer](https://semver.org/).
 
 ### Changed
 - `astra auto` explains a missing NVIDIA driver and refuses to start on a busy port.
+- `stage0-test.ps1` downloads atomically (`.part` then rename); platform shows Windows 11.
 
 ## [0.5.0] — 2026-09-24 — CR-005: zero-input automation
 

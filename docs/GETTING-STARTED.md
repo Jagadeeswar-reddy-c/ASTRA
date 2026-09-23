@@ -167,6 +167,7 @@ Uninstall: delete the `ASTRA` folder, the `astra-lab` folder in your home direct
 | `Python 3.11+ not found` | Install Python (step 0), open a **new** terminal |
 | `no NVIDIA GPU found` / `nvidia-smi not found` | Install the NVIDIA driver, reboot, check `nvidia-smi` |
 | `running scripts is disabled on this system` | Use the exact command with `-ExecutionPolicy Bypass` from step 2 |
+| A smaller model than expected was chosen | ASTRA plans against the GPU memory free *right now*: close GPU-heavy apps and run again, or pin it with `--model/--quant` |
 | `nothing in the catalog fits` | Your GPU has little free memory: close games/browsers using the GPU, or `astra auto --context 4096` |
 | Download slow or interrupted | Run `astra auto` again; finished files are reused |
 | `port 8080 is already in use` | Another engine is running: close it, or `astra auto --port 8090` |

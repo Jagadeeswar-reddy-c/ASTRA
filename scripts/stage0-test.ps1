@@ -58,8 +58,12 @@ function Quote($arg) { if ($arg -match '[\s"]') { '"' + ($arg -replace '"', '\"'
 function Download($url, $dest) {
     Write-Host "    downloading $url"
     # curl.exe ships with Windows 10+ and is much faster than Invoke-WebRequest.
-    Native { & curl.exe -L --fail --retry 3 -o $dest $url }
+    # Download to .part and rename only when complete, so an interrupted download is
+    # never mistaken for a finished file on the next run.
+    $part = "$dest.part"
+    Native { & curl.exe -L --fail --retry 3 -o $part $url }
     if ($LASTEXITCODE -ne 0) { Fail "download failed: $url" }
+    Move-Item -Force $part $dest
 }
 
 # --------------------------------------------------------------------------- 1. checks

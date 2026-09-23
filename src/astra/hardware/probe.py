@@ -10,6 +10,16 @@ from astra.hardware.models import GpuPath, Inventory
 from astra.hardware.runner import CommandRunner, SubprocessRunner
 
 
+def platform_label() -> str:
+    """'Windows 11' too: Python reports release '10' for Windows 11 (build >= 22000)."""
+    system, release = platform.system(), platform.release()
+    if system == "Windows" and release == "10":
+        build = platform.version().split(".")[-1]
+        if build.isdigit() and int(build) >= 22000:
+            release = "11"
+    return f"{system} {release}"
+
+
 def probe(
     runner: CommandRunner | None = None,
     fs: sysfs.SysfsReader | None = None,
@@ -33,7 +43,7 @@ def probe(
         gpus=report.gpus,
         driver_version=report.driver_version,
         cuda_version=report.cuda_version,
-        platform=f"{platform.system()} {platform.release()}",
+        platform=platform_label(),
         paths=paths,
         timestamp=time.time(),
     )
