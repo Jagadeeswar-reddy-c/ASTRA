@@ -245,3 +245,14 @@ def test_auto_dry_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reference
     assert "2 NVIDIA GPU(s)" in text and "RTX 2060" in text and "RTX 3050" in text
     assert "created" in text and "-> " in text
     assert not (tmp_path / "lab").exists()  # dry run downloads nothing
+
+
+def test_port_in_use_detection() -> None:
+    import socket
+
+    with socket.socket() as srv:
+        srv.bind(("127.0.0.1", 0))
+        srv.listen()
+        port = srv.getsockname()[1]
+        assert auto._port_in_use(port)
+    assert not auto._port_in_use(port)

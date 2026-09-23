@@ -28,6 +28,8 @@ the node:
 
 ## Quick start: fully automatic
 
+**New here? Read [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)**: install, run, check and use ASTRA step by step.
+
 ```bash
 pip install -e .        # once (Python 3.11+)
 astra auto              # detect GPUs -> configure -> choose model -> download -> launch -> verify -> console

@@ -23,6 +23,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import threading
 import time
@@ -35,7 +36,7 @@ from typing import Any
 
 from astra import asbuilt, pool
 from astra.config import AstraConfig, user_config_path
-from astra.errors import AstraError, PlanningError
+from astra.errors import AstraError, CommandError, PlanningError
 from astra.hardware.compat import CompatReport, GpuCaps, analyse
 from astra.hardware.models import Inventory
 from astra.hardware.probe import probe
@@ -292,6 +293,12 @@ def _wait_healthy(
     raise AstraError(f"llama-server not healthy after {timeout_s:.0f} s (log: {log})")
 
 
+def _port_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
 def _summary_line(cap: GpuCaps) -> str:
     g = cap.gpu
     link = (
@@ -312,7 +319,21 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
 
     # 1. detect ---------------------------------------------------------------
     echo("[1/6] Detecting GPUs (nvidia-smi) and the network fabric")
-    inv = probe()
+    try:
+        inv = probe()
+    except CommandError as exc:
+        echo(f"    no NVIDIA GPU found ({exc}).")
+        echo(
+            "    Install the NVIDIA driver (Windows: nvidia.com/drivers; Ubuntu: "
+            "sudo ubuntu-drivers install), reboot, and check that `nvidia-smi` lists your GPU."
+        )
+        return 1
+    if not inv.gpus:
+        echo(
+            "    the NVIDIA driver is loaded but reports no GPUs; "
+            "check that the card is seated and powered"
+        )
+        return 1
     report: CompatReport = analyse(
         inv.gpus, inv.driver_version, cfg.chassis, inv.paths, cfg.interconnect.switch_vendor_ids
     )
@@ -399,6 +420,10 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
 
     # 6. launch + verify ------------------------------------------------------
     echo("[6/6] Launching and verifying")
+    if _port_in_use(opts.port):
+        raise AstraError(
+            f"port {opts.port} is already in use (another engine?): stop it or pass --port"
+        )
     log = out / "llama-server.log"
     url = f"http://127.0.0.1:{opts.port}"
     with log.open("wb") as log_fh:

@@ -5,6 +5,16 @@ versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-09-24
+
+### Added
+- docs/GETTING-STARTED.md: new-user guide (install, run, check, use via the OpenAI API, run
+  permanently, add GPUs, update/uninstall, troubleshooting).
+- `scripts/install.ps1` / `scripts/install.sh`: one-step install (+ `astra auto`).
+
+### Changed
+- `astra auto` explains a missing NVIDIA driver and refuses to start on a busy port.
+
 ## [0.5.0] — 2026-09-24 — CR-005: zero-input automation
 
 ### Added

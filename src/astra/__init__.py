@@ -4,4 +4,4 @@ Control plane for an external PCIe-over-cable GPU node: hardware discovery,
 link/runtime validation, heterogeneous VRAM pooling plans and telemetry.
 """
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
