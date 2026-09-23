@@ -11,7 +11,7 @@ dist/
 .coverage
 coverage.xml
 htmlcov/
-reports/
+/reports/
 
 # Local runtime artefacts
 astra.toml
