@@ -5,6 +5,18 @@ versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-09-24
+
+### Added
+- `scripts/stage0-test.ps1`: one-command field test on Windows (downloads llama.cpp +
+  model, plans, starts the engine, measures speed, runtime gate, PASS/FAIL report).
+  Verified on an RTX 3060 Ti: 139.7 tok/s measured vs 149.6 estimated, gate 5/5.
+- docs/03-solution-design/connecting-gpus.md: every way to connect GPUs (x16/x8/x4/x1,
+  risers, M.2, OCuLink, bifurcation, switch, Thunderbolt, network), bandwidth needs,
+  example mixed builds, the single-PSU rule, step-by-step install and troubleshooting.
+- Console GPU table and fabric descriptors show each GPU's PCIe link (Gen/width).
+- `astra probe --emit-config` records the detected topology (switch or not, narrowest link).
+
 ## [0.4.2] — 2026-09-24 — Stage-0 field test fixes
 
 Field test on real hardware (RTX 3060 Ti, llama.cpp b11149): planner speed within

@@ -29,7 +29,7 @@ services:
   # ------------------------------------------------------------------ control plane
   exporter:
     <<: *gpu-service
-    image: ${ASTRA_IMAGE:-astra-control:0.4.2}
+    image: ${ASTRA_IMAGE:-astra-control:0.4.3}
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile

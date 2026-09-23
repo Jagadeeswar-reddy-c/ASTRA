@@ -33,6 +33,10 @@ class NodeGpu:
     temperature_c: float | None = None
     utilization_pct: float | None = None
     power_draw_w: float | None = None
+    link_gen_current: int | None = None
+    link_gen_max: int | None = None
+    link_width_current: int | None = None
+    link_width_max: int | None = None
 
     def to_gpu_info(self, index: int) -> GpuInfo:
         return GpuInfo(
@@ -47,6 +51,10 @@ class NodeGpu:
             temperature_c=self.temperature_c,
             utilization_pct=self.utilization_pct,
             power_draw_w=self.power_draw_w,
+            link_gen_current=self.link_gen_current,
+            link_gen_max=self.link_gen_max,
+            link_width_current=self.link_width_current,
+            link_width_max=self.link_width_max,
         )
 
 
@@ -89,6 +97,10 @@ class NodeDescriptor:
                     temperature_c=g.get("temperature_c"),
                     utilization_pct=g.get("utilization_pct"),
                     power_draw_w=g.get("power_draw_w"),
+                    link_gen_current=g.get("link_gen_current"),
+                    link_gen_max=g.get("link_gen_max"),
+                    link_width_current=g.get("link_width_current"),
+                    link_width_max=g.get("link_width_max"),
                 )
                 for g in data.get("gpus", [])
             )
@@ -125,6 +137,10 @@ def describe(
                 temperature_c=g.temperature_c,
                 utilization_pct=g.utilization_pct,
                 power_draw_w=g.power_draw_w,
+                link_gen_current=g.link_gen_current,
+                link_gen_max=g.link_gen_max,
+                link_width_current=g.link_width_current,
+                link_width_max=g.link_width_max,
             )
             for g in inventory.gpus
         ),

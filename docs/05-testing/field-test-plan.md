@@ -20,6 +20,18 @@ and closes the matching TC IDs.
 
 ## Stage 0 — on your current PC (no purchase)
 
+**One command does all of Stage 0** (downloads llama.cpp and the model if missing,
+plans, starts the engine, measures, runs the runtime gate, writes a report):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\stage0-test.ps1              # 3B model
+powershell -ExecutionPolicy Bypass -File scripts\stage0-test.ps1 -Model 7b    # 7B model
+```
+
+Results go to `%USERPROFILE%\astra-lab\results-<time>\` (`report.md`, `results.json`,
+`runtime-gate.md`, `plan.json`). The same script works after adding GPUs: it plans across
+every GPU ASTRA finds. The manual steps below do the same thing by hand.
+
 1. **llama.cpp for Windows with CUDA.** From https://github.com/ggml-org/llama.cpp/releases
    download the Windows CUDA build (`llama-<build>-bin-win-cuda-<ver>-x64.zip`)
    and, if listed separately, the matching `cudart-…` zip. Unzip both into
@@ -50,11 +62,12 @@ simplest). Use a wired network.
 
 **Second PC (worker):**
 1. Install Python 3.11, clone the repo, `pip install -e .`, and llama.cpp as in
-   Stage 0. `rpc-server.exe` is in the release zip when the build includes RPC. If
-   it is missing, build llama.cpp with `-DGGML_CUDA=ON -DGGML_RPC=ON`.
+   Stage 0 (or run `scripts\stage0-test.ps1` on it once). The RPC server is
+   `ggml-rpc-server.exe` in current llama.cpp releases; the agent finds it by itself.
+   If it is missing, build llama.cpp with `-DGGML_CUDA=ON -DGGML_RPC=ON`.
 2. Give it a name: create `astra.toml` with `[node]` and `name = "pc2"`.
 3. Firewall (Private network only): allow UDP 9836 and TCP 9837, 50052.
-4. `astra agent --rpc --rpc-binary C:\llama\rpc-server.exe`
+4. `astra agent --rpc --rpc-binary C:\llama\ggml-rpc-server.exe`
 
 **Your PC (head):**
 1. `astra cluster` should list `pc2` with its GPU "rpc <ip>:50052". If discovery
@@ -71,6 +84,8 @@ works, and measured tok/s is within ±30 % of the estimate (TC-RT-08).
 **Send back:** `astra cluster --json`, `plan.json`, measured tok/s, a screenshot.
 
 ## Stage 2 — two different GPUs in one desktop (first purchase)
+
+How to connect them (slots, x16/x8/x4, risers, power): [connecting-gpus.md](../03-solution-design/connecting-gpus.md).
 
 Proves pooling across mixed GPUs on local PCIe, plus the Linux-only checks, before
 buying any chassis parts.

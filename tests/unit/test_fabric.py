@@ -297,3 +297,47 @@ def test_cli_agent_needs_rpc_server_binary(
 ) -> None:
     assert cli.main(["agent", "--rpc", "--rpc-binary", "definitely-not-installed-rpc"]) == 2
     assert "GGML_RPC" in capsys.readouterr().err
+
+
+# ----------------------------------------------------------- topology in emit-config
+
+
+def test_emit_config_captures_switch_topology(reference_inventory: Inventory) -> None:
+    lines = cli._topology_config(
+        reference_inventory, AstraConfig(), [g.uuid for g in reference_inventory.gpus]
+    )
+    assert "require_switch = true" in lines
+    assert "expected_uplink_width = 4" in lines and "expected_uplink_gen = 3" in lines
+
+
+def test_emit_config_captures_direct_slot_topology(reference_inventory: Inventory) -> None:
+    from astra.hardware.models import GpuPath, PcieLink
+
+    direct = GpuPath(
+        "0000:01:00.0",
+        chain=(
+            PcieLink(
+                "0000:00:01.0",
+                "0x8086",
+                class_code="0x060400",
+                current_gen=4,
+                current_width=16,
+                max_gen=4,
+                max_width=16,
+            ),
+            PcieLink(
+                "0000:01:00.0",
+                "0x10de",
+                class_code="0x030000",
+                current_gen=4,
+                current_width=8,
+                max_gen=4,
+                max_width=8,
+            ),
+        ),
+    )
+    gpu = reference_inventory.gpus[1]
+    inv = replace(reference_inventory, gpus=(gpu,), paths={gpu.uuid: direct})
+    lines = cli._topology_config(inv, AstraConfig(), [gpu.uuid])
+    assert "require_switch = false" in lines
+    assert "expected_uplink_width = 8" in lines and "expected_uplink_gen = 4" in lines

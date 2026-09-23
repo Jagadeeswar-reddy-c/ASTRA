@@ -264,8 +264,36 @@ def _emit_config(inv: Inventory, cfg: AstraConfig) -> str:
         f"psu_watts = {cfg.chassis.psu_watts}  # these GPUs need >= "
         f"{report.power.recommended_psu_watts} W",
         f"slots = {cfg.chassis.slots}",
+        "",
     ]
+    lines += _topology_config(inv, cfg, [c.gpu.uuid for c in report.chassis])
     return "\n".join(lines) + "\n"
+
+
+def _topology_config(inv: Inventory, cfg: AstraConfig, uuids: list[str]) -> list[str]:
+    """[interconnect] matching what is plugged in: switch or not, narrowest link."""
+    paths = [inv.paths[u] for u in uuids if u in inv.paths]
+    if not paths:
+        return [
+            "[interconnect]",
+            "# PCIe topology not visible here (needs Linux sysfs); defaults kept.",
+            f"require_switch = {str(cfg.interconnect.require_switch).lower()}",
+        ]
+    vendors = cfg.interconnect.switch_vendor_ids
+    has_switch = any(p.switches(vendors) for p in paths)
+    hops = [p.bottleneck for p in paths if p.bottleneck is not None]
+    width = min((h.current_width or 16) for h in hops) if hops else 16
+    # The link can only train as fast as the slowest device on it (e.g. a Gen3 switch).
+    gens = [h.max_gen for p in paths for h in p.chain if h.max_gen]
+    gen = min(gens) if gens else 3
+    kind = "PCIe switch" if has_switch else "direct slots / bifurcation / adapters"
+    return [
+        "[interconnect]",
+        f"# detected: {kind}; narrowest link Gen{gen} x{width}",
+        f"require_switch = {str(has_switch).lower()}",
+        f"expected_uplink_gen = {gen}",
+        f"expected_uplink_width = {width}",
+    ]
 
 
 def _format_compat(report: CompatReport) -> str:

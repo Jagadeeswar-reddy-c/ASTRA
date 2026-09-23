@@ -401,6 +401,13 @@ function renderTopology() {
 }
 
 // ---------------------------------------------------------------------- GPU table
+function pcie(p) {
+  if (!p || !p.width) return "–";
+  const narrow = p.width_max && p.width < p.width_max;
+  const txt = `Gen${p.gen ?? "?"} x${p.width}`;
+  const max = p.gen_max || p.width_max ? ` <span class="meta">(Gen${p.gen_max ?? "?"} x${p.width_max ?? "?"})</span>` : "";
+  return narrow ? `<span style="color:var(--warn)" title="running below the card's width">${txt}</span>${max}` : txt + max;
+}
 function renderGpuTable() {
   const plan = planIndex();
   const rows = allGpus().map((g) => {
@@ -419,10 +426,11 @@ function renderGpuTable() {
         <div class="meta num">${gb(g.memory_used_bytes)} / ${gb(g.memory_total_bytes)}${p ? " · plan " + gb(p.required_bytes) : ""}</div></td>
       <td class="num">${temp}</td><td class="num">${util}</td><td class="num">${power}</td>
       <td class="num">${g.bandwidth_gbps ? g.bandwidth_gbps + " GB/s" : "–"}</td>
+      <td class="num">${pcie(g.pcie)}</td>
     </tr>`;
   });
-  $("gpu-table").innerHTML = `<thead><tr><th>Stage</th><th>GPU</th><th>Node</th><th>VRAM</th><th>Temp</th><th>Util</th><th>Power</th><th>Mem BW</th></tr></thead>
-    <tbody>${rows.join("") || `<tr><td colspan="8" class="empty">No GPUs found. ${esc((state.pool.notes || []).join(" "))}</td></tr>`}</tbody>`;
+  $("gpu-table").innerHTML = `<thead><tr><th>Stage</th><th>GPU</th><th>Node</th><th>VRAM</th><th>Temp</th><th>Util</th><th>Power</th><th>Mem BW</th><th title="Link negotiated with the slot/switch/cable (max in brackets). Idle GPUs drop to Gen1 to save power.">PCIe link</th></tr></thead>
+    <tbody>${rows.join("") || `<tr><td colspan="9" class="empty">No GPUs found. ${esc((state.pool.notes || []).join(" "))}</td></tr>`}</tbody>`;
 }
 
 // --------------------------------------------------------------------------- plan

@@ -18,6 +18,8 @@ the node:
 | Engineering standards, dev setup | [`docs/04-development`](docs/04-development), [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Test strategy, test cases, traceability | [`docs/05-testing`](docs/05-testing) |
 | **Testing on real hardware (what to buy, step by step)** | [`docs/05-testing/field-test-plan.md`](docs/05-testing/field-test-plan.md) |
+| **Connecting more GPUs** (x16 / x8 / x4 / x1, risers, OCuLink, bifurcation, switch, network) | [`docs/03-solution-design/connecting-gpus.md`](docs/03-solution-design/connecting-gpus.md) |
+| **One-command test on your PC** | `powershell -ExecutionPolicy Bypass -File scripts\stage0-test.ps1` |
 | **Supported GPUs** (`astra gpus`) | [`docs/03-solution-design/supported-gpus.md`](docs/03-solution-design/supported-gpus.md) |
 | Deployment guide, release process | [`docs/06-deployment`](docs/06-deployment) |
 | Monitoring and runbooks | [`docs/07-operations`](docs/07-operations) |

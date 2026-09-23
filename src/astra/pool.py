@@ -129,6 +129,12 @@ class Pool:
                         "display_active": g.display_active,
                         "rpc_endpoint": b.rpc_endpoint if b else None,
                         "usable": b is not None,
+                        "pcie": {
+                            "gen": g.link_gen_current,
+                            "gen_max": g.link_gen_max,
+                            "width": g.link_width_current,
+                            "width_max": g.link_width_max,
+                        },
                     }
                 )
             out_nodes.append(
