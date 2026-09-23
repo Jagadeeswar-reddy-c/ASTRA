@@ -1,0 +1,149 @@
+# ASTRA runtime stack.
+#
+#   1. astra plan --gguf /srv/models/<file>.gguf --env-file deploy/compose/.env
+#   2. docker compose -f deploy/compose/compose.yaml --profile pooled up -d
+#
+# Profiles (pick one workload profile; monitoring always runs):
+#   pooled       llama.cpp server with the model split across all planned GPUs (ADR-0003)
+#   vllm         vLLM OpenAI server, pipeline-parallel with the planned layer partition
+#   partitioned  concept-doc "heterogeneous containerization": inference on one GPU,
+#                NVENC transcoding on the other (set ASTRA_GPU_INFER / ASTRA_GPU_TRANSCODE)
+#
+# GPUs are addressed by UUID via NVIDIA_VISIBLE_DEVICES (ADR-0004), never by index.
+# Requires the NVIDIA Container Toolkit with the `nvidia` runtime registered
+# (`sudo nvidia-ctk runtime configure --runtime=docker`).
+#
+# GPU mixes with Maxwell/Pascal/Volta cards (e.g. GT 1030, GTX 10xx) need a llama.cpp image
+# built with CUDA 12.x and every card's arch: set LLAMA_IMAGE to it (see `astra compat`).
+
+name: astra
+
+x-gpu-service: &gpu-service
+  runtime: nvidia
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  # ------------------------------------------------------------------ control plane
+  exporter:
+    <<: *gpu-service
+    image: ${ASTRA_IMAGE:-astra-control:0.4.1}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: utility
+    volumes:
+      - ${ASTRA_CONFIG_FILE:-../../config/astra.example.toml}:/etc/astra/astra.toml:ro
+    ports: ["127.0.0.1:9835:9835"]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+
+  prometheus:
+    image: prom/prometheus:v2.53.2
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
+    volumes:
+      - ../prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    ports: ["127.0.0.1:9090:9090"]
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports: ["127.0.0.1:3000:3000"]
+
+  # ------------------------------------------------------------------- workloads
+  llama-pooled:
+    <<: *gpu-service
+    profiles: [pooled]
+    image: ${LLAMA_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda}
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${ASTRA_GPU_UUIDS:?run astra plan --env-file first}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      CUDA_DEVICE_ORDER: PCI_BUS_ID
+    volumes:
+      - ${ASTRA_MODEL_DIR:-/srv/models}:/models:ro
+    command:
+      - --model=/models/${ASTRA_MODEL}
+      - --n-gpu-layers=${ASTRA_N_GPU_LAYERS}
+      - --split-mode=layer
+      - --tensor-split=${ASTRA_LAYER_SPLIT}
+      - --main-gpu=0
+      - --ctx-size=${ASTRA_CONTEXT}
+      - --host=0.0.0.0
+      - --port=8080
+      - --metrics
+    ports: ["${ASTRA_BIND:-127.0.0.1}:8080:8080"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 120s
+
+  vllm-pooled:
+    <<: *gpu-service
+    profiles: [vllm]
+    image: vllm/vllm-openai:${VLLM_VERSION:-v0.6.3}
+    ipc: host
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${ASTRA_GPU_UUIDS:?run astra plan --engine vllm --env-file first}
+      CUDA_DEVICE_ORDER: PCI_BUS_ID
+      VLLM_PP_LAYER_PARTITION: ${ASTRA_LAYER_SPLIT}
+      HUGGING_FACE_HUB_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - ${HF_CACHE:-/srv/hf-cache}:/root/.cache/huggingface
+    command:
+      - --model=${ASTRA_MODEL}
+      - --pipeline-parallel-size=${ASTRA_PIPELINE_STAGES}
+      - --tensor-parallel-size=1
+      - --gpu-memory-utilization=${ASTRA_GPU_UTIL}
+      - --max-model-len=${ASTRA_CONTEXT}
+      - --dtype=float16
+    ports: ["${ASTRA_BIND:-127.0.0.1}:8000:8000"]
+
+  llama-dedicated:
+    <<: *gpu-service
+    profiles: [partitioned]
+    image: ${LLAMA_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda}
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${ASTRA_GPU_INFER:?set ASTRA_GPU_INFER to a GPU UUID}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    volumes:
+      - ${ASTRA_MODEL_DIR:-/srv/models}:/models:ro
+    command:
+      - --model=/models/${ASTRA_MODEL}
+      - --n-gpu-layers=999
+      - --ctx-size=${ASTRA_CONTEXT:-8192}
+      - --host=0.0.0.0
+      - --port=8080
+    ports: ["${ASTRA_BIND:-127.0.0.1}:8080:8080"]
+
+  transcoder:
+    <<: *gpu-service
+    profiles: [partitioned]
+    image: linuxserver/ffmpeg:7.0.2
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${ASTRA_GPU_TRANSCODE:?set ASTRA_GPU_TRANSCODE to a GPU UUID}
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+    volumes:
+      - ${ASTRA_MEDIA_DIR:-/srv/media}:/media
+    # Placeholder job: replace with the site's transcoding queue consumer.
+    entrypoint: ["/bin/sh", "-c", "echo 'transcoder ready on dedicated GPU'; sleep infinity"]
+    restart: "no"
+
+volumes:
+  prometheus-data:
+  grafana-data:

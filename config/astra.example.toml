@@ -1,0 +1,69 @@
+# ASTRA node configuration — copy to /etc/astra/astra.toml (Linux) or ./astra.toml.
+# Every key is optional; defaults are shown. ASTRA works with any NVIDIA GT/GTX/RTX mix.
+#
+# Fastest way to a correct file after installing (or swapping) GPUs:
+#     astra compat                          # check the driver, engines and PSU for these GPUs
+#     astra probe --emit-config > astra.toml  # freeze the installed GPUs as the as-built node
+
+[node]
+name = "astra-01"
+
+# One entry per GPU in the chassis. `match` is a case-insensitive substring of the product
+# name; `vram_mib` is checked with ±5 % tolerance. GPUs not listed (e.g. the host's own
+# display GPU) are reported but do not fail validation. Leave empty to skip check L02.
+# Example (the concept document's reference build):
+[[node.expected_gpu]]
+match = "RTX 2060"
+vram_mib = 6144
+
+[[node.expected_gpu]]
+match = "RTX 3050"
+vram_mib = 8192
+
+[interconnect]
+# OCuLink 4i through a PEX8747 (a Gen3 switch): the uplink negotiates Gen3 x4 ≈ 3.9 GB/s.
+expected_uplink_gen = 3
+expected_uplink_width = 4
+require_switch = true
+switch_vendor_ids = ["0x10b5"]   # Broadcom / PLX
+
+[chassis]
+# Size the PSU for the GPUs you actually install: `astra compat` prints the recommendation.
+psu_watts = 650
+slots = 4                        # downstream slots on the switch backplane
+overhead_watts = 25              # switch + OCuLink receiver + fans
+transient_factor = 1.3           # short GPU power excursions above board power
+max_sustained_ratio = 0.7        # keep sustained load at or below 70 % of the PSU rating
+
+[thermal]
+warn_c = 80
+crit_c = 87
+
+[planner]
+gpu_memory_utilization = 0.90    # fraction of each GPU the inference engine may use
+reserve_mib = 768                # per-GPU headroom for CUDA context + compute buffers
+default_context = 8192
+objective = "speed"              # "speed": fastest GPU set; "balanced": equal memory pressure
+exclude_gpus = []                # UUIDs or name substrings never auto-selected, e.g. ["GT 1030"]
+
+[fabric]
+# GPUs on other machines (ADR-0011). Each machine runs `astra agent --rpc`.
+node_name = ""                   # defaults to [node].name; must be unique in the fabric
+bind = "0.0.0.0"                 # prefer the cluster-LAN address; never expose to the internet
+agent_port = 9837
+discovery_port = 9836
+rpc_port_base = 50052            # one rpc-server per GPU: 50052, 50053, ...
+rpc_binary = "rpc-server"
+network_hop_ms = 2.0             # per token per machine boundary (1 GbE ~2 ms)
+peers = []                       # e.g. ["192.168.10.7"]; empty = UDP discovery
+
+[telemetry]
+listen = "0.0.0.0"
+port = 9835
+min_sample_interval_s = 2.0
+
+[validation]
+max_replay_count = 0             # any PCIe replay at acceptance = marginal signal integrity
+runtime_tolerance = 0.15         # allowed deviation of the measured memory split from plan
+runtime_samples = 10
+runtime_sample_interval_s = 0.5

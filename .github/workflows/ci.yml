@@ -1,0 +1,74 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: lint + types
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip }
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests
+      - run: ruff format --check src tests
+      - run: mypy
+
+  test:
+    name: tests (${{ matrix.os }}, py${{ matrix.python }})
+    needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+        python: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ matrix.python }}", cache: pip }
+      - run: pip install -e ".[dev]"
+      # Hardware tests self-skip on runners without an NVIDIA driver.
+      - run: pytest --cov --cov-report=xml --junitxml=reports/junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports-${{ matrix.os }}-${{ matrix.python }}
+          path: |
+            reports/junit.xml
+            coverage.xml
+
+  deploy-config:
+    name: deployment artefacts
+    needs: quality
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck host setup
+        run: shellcheck deploy/host/setup-host.sh
+      - name: compose file renders
+        run: |
+          cp deploy/compose/.env.example deploy/compose/.env
+          docker compose -f deploy/compose/compose.yaml --profile pooled --profile vllm \
+            --profile partitioned config --quiet
+      - name: prometheus config and rules valid
+        run: |
+          docker run --rm -v "$PWD/deploy/prometheus:/etc/prometheus:ro" --entrypoint promtool \
+            prom/prometheus:v2.53.2 check config /etc/prometheus/prometheus.yml
+      - name: build control-plane image
+        run: docker build -f deploy/docker/Dockerfile -t astra-control:ci .
+      - name: image smoke test
+        run: |
+          docker run --rm astra-control:ci --version
+          docker run --rm astra-control:ci plan --simulate reference --model qwen2.5-14b

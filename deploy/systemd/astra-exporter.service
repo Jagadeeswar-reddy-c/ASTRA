@@ -1,0 +1,22 @@
+[Unit]
+Description=ASTRA Prometheus exporter
+Documentation=file:///opt/astra/docs/07-operations/monitoring.md
+After=network-online.target nvidia-persistenced.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=astra
+Group=astra
+ExecStart=/opt/astra/venv/bin/astra --config /etc/astra/astra.toml exporter
+Restart=always
+RestartSec=5
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

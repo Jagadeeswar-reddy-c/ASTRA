@@ -1,0 +1,25 @@
+[Unit]
+Description=ASTRA pooled inference engine (planned split, bare-metal alternative to compose)
+Documentation=file:///opt/astra/docs/06-deployment/deployment-guide.md
+# Fail-safe: never start the engine on a node whose link gate failed.
+Requires=astra-selftest.service
+After=astra-selftest.service
+
+[Service]
+Type=simple
+User=astra
+Group=astra
+EnvironmentFile=/etc/astra/inference.env
+# `astra launch` re-plans against live free memory and execs the engine.
+ExecStart=/opt/astra/venv/bin/astra --config /etc/astra/astra.toml launch \
+    --gguf ${ASTRA_GGUF} --context ${ASTRA_CONTEXT} --port ${ASTRA_PORT} --binary ${ASTRA_BINARY}
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=300
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/srv/models
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

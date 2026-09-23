@@ -1,0 +1,114 @@
+<?xml version="1.0" ?>
+<!DOCTYPE nvidia_smi_log SYSTEM "nvsmi_device_v12.dtd">
+<!-- Synthetic: the ASTRA reference node (RTX 2060 + RTX 3050 behind a PEX8747) as an
+     older (R535-era) Linux driver reports it: clocks_throttle_reasons, power_readings. -->
+<nvidia_smi_log>
+	<timestamp>Mon Jan 15 10:00:00 2024</timestamp>
+	<driver_version>535.154.05</driver_version>
+	<cuda_version>12.2</cuda_version>
+	<attached_gpus>2</attached_gpus>
+	<gpu id="00000000:04:00.0">
+		<product_name>NVIDIA GeForce RTX 2060</product_name>
+		<product_brand>GeForce</product_brand>
+		<product_architecture>Turing</product_architecture>
+		<uuid>GPU-2060aaaa-0000-4000-8000-000000002060</uuid>
+		<vbios_version>90.06.0B.00.3A</vbios_version>
+		<pci>
+			<pci_bus>04</pci_bus>
+			<pci_bus_id>00000000:04:00.0</pci_bus_id>
+			<pci_gpu_link_info>
+				<pcie_gen>
+					<max_link_gen>3</max_link_gen>
+					<current_link_gen>3</current_link_gen>
+				</pcie_gen>
+				<link_widths>
+					<max_link_width>16x</max_link_width>
+					<current_link_width>16x</current_link_width>
+				</link_widths>
+			</pci_gpu_link_info>
+			<replay_counter>0</replay_counter>
+			<replay_rollover_counter>0</replay_rollover_counter>
+		</pci>
+		<fan_speed>41 %</fan_speed>
+		<performance_state>P2</performance_state>
+		<clocks_throttle_reasons>
+			<clocks_throttle_reason_gpu_idle>Not Active</clocks_throttle_reason_gpu_idle>
+			<clocks_throttle_reason_sw_power_cap>Active</clocks_throttle_reason_sw_power_cap>
+			<clocks_throttle_reason_hw_slowdown>Not Active</clocks_throttle_reason_hw_slowdown>
+			<clocks_throttle_reason_hw_thermal_slowdown>Not Active</clocks_throttle_reason_hw_thermal_slowdown>
+			<clocks_throttle_reason_hw_power_brake_slowdown>Not Active</clocks_throttle_reason_hw_power_brake_slowdown>
+			<clocks_throttle_reason_sw_thermal_slowdown>Not Active</clocks_throttle_reason_sw_thermal_slowdown>
+		</clocks_throttle_reasons>
+		<fb_memory_usage>
+			<total>6144 MiB</total>
+			<reserved>150 MiB</reserved>
+			<used>5210 MiB</used>
+			<free>784 MiB</free>
+		</fb_memory_usage>
+		<utilization>
+			<gpu_util>87 %</gpu_util>
+			<memory_util>40 %</memory_util>
+		</utilization>
+		<temperature>
+			<gpu_temp>71 C</gpu_temp>
+			<gpu_temp_slow_threshold>91 C</gpu_temp_slow_threshold>
+		</temperature>
+		<power_readings>
+			<power_state>P2</power_state>
+			<power_draw>151.20 W</power_draw>
+			<power_limit>160.00 W</power_limit>
+		</power_readings>
+	</gpu>
+	<gpu id="00000000:05:00.0">
+		<product_name>NVIDIA GeForce RTX 3050</product_name>
+		<product_brand>GeForce</product_brand>
+		<product_architecture>Ampere</product_architecture>
+		<uuid>GPU-3050bbbb-0000-4000-8000-000000003050</uuid>
+		<vbios_version>94.06.2A.00.5B</vbios_version>
+		<pci>
+			<pci_bus>05</pci_bus>
+			<pci_bus_id>00000000:05:00.0</pci_bus_id>
+			<pci_gpu_link_info>
+				<pcie_gen>
+					<max_link_gen>3</max_link_gen>
+					<current_link_gen>3</current_link_gen>
+				</pcie_gen>
+				<link_widths>
+					<max_link_width>8x</max_link_width>
+					<current_link_width>8x</current_link_width>
+				</link_widths>
+			</pci_gpu_link_info>
+			<replay_counter>0</replay_counter>
+			<replay_rollover_counter>0</replay_rollover_counter>
+		</pci>
+		<fan_speed>38 %</fan_speed>
+		<performance_state>P2</performance_state>
+		<clocks_throttle_reasons>
+			<clocks_throttle_reason_gpu_idle>Not Active</clocks_throttle_reason_gpu_idle>
+			<clocks_throttle_reason_sw_power_cap>Not Active</clocks_throttle_reason_sw_power_cap>
+			<clocks_throttle_reason_hw_slowdown>Not Active</clocks_throttle_reason_hw_slowdown>
+			<clocks_throttle_reason_hw_thermal_slowdown>Not Active</clocks_throttle_reason_hw_thermal_slowdown>
+			<clocks_throttle_reason_hw_power_brake_slowdown>Not Active</clocks_throttle_reason_hw_power_brake_slowdown>
+			<clocks_throttle_reason_sw_thermal_slowdown>Not Active</clocks_throttle_reason_sw_thermal_slowdown>
+		</clocks_throttle_reasons>
+		<fb_memory_usage>
+			<total>8192 MiB</total>
+			<reserved>200 MiB</reserved>
+			<used>6890 MiB</used>
+			<free>1102 MiB</free>
+		</fb_memory_usage>
+		<utilization>
+			<gpu_util>82 %</gpu_util>
+			<memory_util>35 %</memory_util>
+		</utilization>
+		<temperature>
+			<gpu_temp>66 C</gpu_temp>
+			<gpu_temp_slow_threshold>95 C</gpu_temp_slow_threshold>
+		</temperature>
+		<power_readings>
+			<power_state>P2</power_state>
+			<power_draw>118.40 W</power_draw>
+			<power_limit>130.00 W</power_limit>
+		</power_readings>
+	</gpu>
+</nvidia_smi_log>

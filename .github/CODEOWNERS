@@ -1,0 +1,13 @@
+# Map paths to the owning role's GitHub team. Replace the team handles with real ones.
+*                              @astra/solution-architects
+/docs/00-governance/           @astra/pm
+/docs/01-requirements/         @astra/pm @astra/enterprise-architects
+/docs/02-architecture/         @astra/enterprise-architects
+/docs/03-solution-design/      @astra/solution-architects @astra/hardware
+/hardware/                     @astra/hardware
+/docs/05-testing/              @astra/qa
+/tests/                        @astra/qa
+/deploy/                       @astra/devops
+/docs/06-deployment/           @astra/devops
+/docs/07-operations/           @astra/devops
+/.github/                      @astra/devops

@@ -1,0 +1,23 @@
+[Unit]
+Description=ASTRA link gate self-test (PCIe switch, uplink, AER, thermals)
+Documentation=file:///opt/astra/docs/06-deployment/deployment-guide.md
+After=nvidia-persistenced.service systemd-journald.service
+Wants=nvidia-persistenced.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=astra
+Group=astra
+# journalctl -k needs the systemd-journal group; exit 1 (FAIL) blocks astra-inference.
+SupplementaryGroups=systemd-journal
+StateDirectory=astra
+ExecStart=/opt/astra/venv/bin/astra --config /etc/astra/astra.toml validate --phase link \
+    --format json --output /var/lib/astra/selftest-last.json
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

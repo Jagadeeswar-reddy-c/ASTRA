@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ASTRA Console</title>
+<style>
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --panel-2: #f0f2f5; --border: #dde1e7;
+  --text: #16191d; --muted: #5d6673; --faint: #8a93a0;
+  --accent: #0f9d86; --accent-ink: #ffffff; --accent-soft: rgba(15,157,134,.12);
+  --ok: #1a8f4c; --warn: #b7791f; --fail: #c53030; --info: #2b6cb0;
+  --used: #9aa3af; --track: #e6e9ee; --link: #b8c0cc;
+  --s0: #3b82f6; --s1: #f59e0b; --s2: #10b981; --s3: #ef4444; --s4: #8b5cf6; --s5: #06b6d4;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  --radius: 12px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1014; --panel: #151a20; --panel-2: #1b2129; --border: #28303a;
+    --text: #e8ecf1; --muted: #9aa5b3; --faint: #6b7684;
+    --accent: #2dd4b0; --accent-ink: #062a22; --accent-soft: rgba(45,212,176,.14);
+    --ok: #3ccf7e; --warn: #f0b429; --fail: #f56565; --info: #63b3ed;
+    --used: #5b6673; --track: #232a33; --link: #3a4452;
+    --shadow: none;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  padding: 0 16px 32px;
+}
+.num { font-variant-numeric: tabular-nums; }
+.mono { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace; font-size: 12.5px; }
+header.top {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px;
+  max-width: 1480px; margin: 0 auto; padding: 16px 0 12px;
+}
+.brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
+.brand svg { width: 30px; height: 30px; }
+.brand b { font-size: 18px; letter-spacing: .12em; }
+.brand span { color: var(--muted); font-size: 13px; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--panel);
+  font-size: 12.5px; color: var(--muted);
+}
+.pill strong { color: var(--text); font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.dot.on { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+.banner {
+  max-width: 1480px; margin: 0 auto 12px; padding: 9px 14px; border-radius: 10px;
+  background: var(--accent-soft); color: var(--text); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  font-size: 13px;
+}
+main {
+  max-width: 1480px; margin: 0 auto; display: grid; gap: 16px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+}
+@media (max-width: 980px) { main { grid-template-columns: minmax(0, 1fr); } }
+.card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); min-width: 0;
+}
+.card > h2 {
+  margin: 0; padding: 12px 16px; font-size: 13px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+}
+.card > h2 .grow { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.stack { display: grid; gap: 16px; min-width: 0; }
+#topo-wrap { padding: 8px; overflow-x: auto; }
+#topo { width: 100%; min-width: 520px; height: auto; display: block; }
+#topo text { fill: var(--text); font-family: inherit; }
+#topo .muted { fill: var(--muted); }
+#topo .faint { fill: var(--faint); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 0 16px 12px; color: var(--muted); font-size: 12px; }
+.legend i { display: inline-block; width: 18px; height: 6px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+.table-wrap { overflow-x: auto; }
+.bar { position: relative; height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; min-width: 120px; }
+.bar > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+.chip {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px;
+  padding: 0 6px; border-radius: 6px; color: #fff; font-weight: 700; font-size: 12px;
+}
+.chip.none { background: var(--panel-2); color: var(--faint); border: 1px solid var(--border); }
+.tag { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
+.tag.head { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.tabs { display: flex; gap: 4px; padding: 8px 8px 0; border-bottom: 1px solid var(--border); }
+.tabs button {
+  border: 0; background: none; color: var(--muted); padding: 9px 14px; font: inherit; font-weight: 600;
+  border-bottom: 2px solid transparent; cursor: pointer;
+}
+.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.tabpanel { padding: 16px; }
+.form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.form .full { grid-column: 1 / -1; }
+label { display: grid; gap: 5px; font-size: 12px; color: var(--muted); font-weight: 600; }
+select, input, textarea {
+  font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; width: 100%;
+}
+textarea { resize: vertical; min-height: 44px; }
+select:focus, input:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn {
+  border: 0; border-radius: 8px; padding: 9px 16px; font: inherit; font-weight: 700; cursor: pointer;
+  background: var(--accent); color: var(--accent-ink);
+}
+.btn.ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); font-weight: 600; }
+.btn:disabled { opacity: .55; cursor: default; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+.kpi { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.kpi small { display: block; color: var(--muted); font-size: 11.5px; }
+.kpi b { font-size: 18px; }
+.strip { display: flex; height: 30px; border-radius: 8px; overflow: hidden; margin: 8px 0 4px; border: 1px solid var(--border); }
+.strip > div { display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 700; min-width: 0; overflow: hidden; white-space: nowrap; }
+.strip-scale { display: flex; justify-content: space-between; color: var(--faint); font-size: 11px; }
+.notes { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.notes li { padding: 7px 10px; border-radius: 8px; background: var(--panel-2); border-left: 3px solid var(--info); font-size: 12.5px; }
+.notes li.warn { border-left-color: var(--warn); }
+.notes li.fail { border-left-color: var(--fail); }
+.notes li.ok { border-left-color: var(--ok); }
+.status { font-weight: 700; padding: 2px 8px; border-radius: 6px; font-size: 12px; }
+.status.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+.status.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.status.fail { background: color-mix(in srgb, var(--fail) 16%, transparent); color: var(--fail); }
+pre.cmd {
+  margin: 8px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--border); white-space: pre-wrap; word-break: break-all;
+}
+h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); margin: 18px 0 6px; }
+.empty { color: var(--muted); padding: 20px 4px; text-align: center; }
+#chat-log { display: grid; gap: 10px; max-height: 52vh; overflow-y: auto; padding: 2px; margin-bottom: 12px; }
+.msg { padding: 10px 12px; border-radius: 10px; white-space: pre-wrap; word-wrap: break-word; }
+.msg.user { background: var(--accent-soft); justify-self: end; max-width: 88%; }
+.msg.assistant { background: var(--panel-2); border: 1px solid var(--border); max-width: 96%; }
+.msg.error { background: color-mix(in srgb, var(--fail) 12%, transparent); color: var(--fail); }
+.meta { color: var(--faint); font-size: 11.5px; margin-top: 4px; }
+.meter { height: 12px; border-radius: 6px; background: var(--track); position: relative; overflow: hidden; }
+.meter > span { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); }
+.meter > i { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--warn); }
+.hint { color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="2"/>
+      <circle cx="16" cy="4" r="3.2" fill="var(--s0)"/><circle cx="26.4" cy="22" r="3.2" fill="var(--s1)"/>
+      <circle cx="5.6" cy="22" r="3.2" fill="var(--s2)"/><circle cx="16" cy="16" r="4" fill="var(--accent)"/>
+    </svg>
+    <b>ASTRA</b><span>GPU pool console</span>
+  </div>
+  <div class="pills" id="pills"></div>
+</header>
+<div class="banner" id="banner" hidden></div>
+
+<main>
+  <div class="stack">
+    <section class="card" aria-labelledby="topo-h">
+      <h2 id="topo-h">Topology <span class="grow hint" id="topo-sub"></span></h2>
+      <div id="topo-wrap"><svg id="topo" role="img" aria-label="Cluster topology"></svg></div>
+      <div class="legend" id="legend"></div>
+    </section>
+    <section class="card" aria-labelledby="gpus-h">
+      <h2 id="gpus-h">GPUs</h2>
+      <div class="table-wrap"><table id="gpu-table"></table></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="plan">Plan</button>
+      <button role="tab" aria-selected="false" data-tab="chat">Chat</button>
+      <button role="tab" aria-selected="false" data-tab="health">Health</button>
+    </div>
+
+    <div class="tabpanel" id="tab-plan" role="tabpanel">
+      <form class="form" id="plan-form">
+        <label class="full">Model <select id="f-model"></select></label>
+        <label>Engine
+          <select id="f-engine"><option value="llamacpp">llama.cpp</option><option value="vllm">vLLM</option></select>
+        </label>
+        <label>Quantization <select id="f-quant"></select></label>
+        <label>Context (tokens) <input id="f-context" type="number" min="256" max="262144" step="256" value="8192"></label>
+        <label>Objective
+          <select id="f-objective"><option value="speed">Speed</option><option value="balanced">Balanced memory</option></select>
+        </label>
+        <div class="full row"><button class="btn" id="plan-btn" type="submit">Plan on this pool</button><span class="hint" id="plan-status"></span></div>
+      </form>
+      <div id="plan-out"></div>
+    </div>
+
+    <div class="tabpanel" id="tab-chat" role="tabpanel" hidden>
+      <div id="chat-state" class="hint"></div>
+      <div id="chat-log" aria-live="polite"></div>
+      <form id="chat-form" class="row">
+        <textarea id="chat-input" rows="2" placeholder="Ask the pooled model…" style="flex:1 1 240px"></textarea>
+        <button class="btn" id="chat-send" type="submit">Send</button>
+        <button class="btn ghost" id="chat-clear" type="button">Clear</button>
+      </form>
+    </div>
+
+    <div class="tabpanel" id="tab-health" role="tabpanel" hidden>
+      <div id="health-out"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const STAGE_VARS = ["--s0", "--s1", "--s2", "--s3", "--s4", "--s5"];
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const stageColor = (i) => css(STAGE_VARS[i % STAGE_VARS.length]);
+const $ = (id) => document.getElementById(id);
+const GiB = 1024 ** 3;
+const gb = (b) => (b == null ? "–" : (b / GiB).toFixed(b >= 10 * GiB ? 0 : 1) + " GB");
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const short = (n) => String(n || "").replace(/^NVIDIA (GeForce )?/, "");
+let state = null, models = null, quants = [];
+
+// ------------------------------------------------------------------ state polling
+async function poll() {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    state = await r.json();
+    render();
+  } catch (e) {
+    $("banner").hidden = false;
+    $("banner").textContent = "Console lost contact with the ASTRA server — retrying…";
+  }
+}
+function planIndex() {
+  const map = new Map();
+  (state?.plan?.devices || []).forEach((d, i) => map.set(d.uuid, { stage: i, ...d }));
+  return map;
+}
+function allGpus() {
+  return (state?.pool?.nodes || []).flatMap((n) => n.gpus.map((g) => ({ ...g, node: n.name, role: n.role })));
+}
+function render() {
+  renderHeader();
+  renderTopology();
+  renderGpuTable();
+  renderHealth();
+  renderChatState();
+  if (state.plan && !$("plan-out").dataset.rendered) { syncForm(state.plan); renderPlan(state.plan); }
+}
+function syncForm(p) {
+  // Plans made elsewhere (CLI --plan, another browser) load into the form too.
+  const m = /^catalog:([^/]+)\/(.+)$/.exec(p.model.source || "");
+  $("f-engine").value = p.engine; syncQuants();
+  if (m) { $("f-model").value = m[1]; $("f-quant").value = m[2]; }
+  $("f-context").value = p.context; $("f-objective").value = p.objective;
+}
+
+function renderHeader() {
+  const gpus = allGpus();
+  const vram = gpus.filter((g) => g.usable).reduce((s, g) => s + (g.memory_total_bytes || 0), 0);
+  const nodes = state.pool.nodes.length;
+  const eng = state.engine;
+  $("pills").innerHTML =
+    `<span class="pill"><strong>${nodes}</strong> node${nodes === 1 ? "" : "s"}</span>` +
+    `<span class="pill"><strong>${gpus.length}</strong> GPU${gpus.length === 1 ? "" : "s"}</span>` +
+    `<span class="pill"><strong class="num">${gb(vram)}</strong> pooled VRAM</span>` +
+    `<span class="pill" title="${esc(eng.url)}"><span class="dot ${eng.online ? "on" : ""}"></span>` +
+    `engine ${eng.online ? "<strong>online</strong>" + (eng.model ? " · " + esc(eng.model) : "") : "offline"}</span>` +
+    `<span class="pill">v${esc(state.version)}</span>`;
+  const b = $("banner");
+  if (state.pool.simulated) {
+    b.hidden = false;
+    b.textContent = "Simulation mode — GPUs are hypothetical (from --simulate). Plans are real calculations; live stats are not.";
+  } else b.hidden = true;
+  const p = state.plan;
+  $("topo-sub").textContent = p ? `Active plan: ${p.model.name} · ${p.layer_counts.length} stage${p.layer_counts.length > 1 ? "s" : ""}` : "No active plan — use the Plan tab";
+}
+
+// ----------------------------------------------------------------------- topology
+function renderTopology() {
+  const svg = $("topo");
+  const nodes = state.pool.nodes;
+  const plan = planIndex();
+  const W = 250, ROW = 50, HEAD = 58;
+  const boxes = nodes.map((n) => ({ n, w: W, h: HEAD + Math.max(1, n.gpus.length) * ROW + 10 }));
+  const k = boxes.length;
+  // Ring layout (exo-style): head at the top, workers around it.
+  const R = k <= 1 ? 0 : Math.max(210, 95 * k);
+  boxes.forEach((b, i) => {
+    const a = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(k, 1);
+    b.cx = Math.cos(a) * R; b.cy = Math.sin(a) * R * (k === 2 ? 0.0 : 0.72);
+    if (k === 2) b.cx = (i === 0 ? -1 : 1) * 190;
+    b.x = b.cx - b.w / 2; b.y = b.cy - b.h / 2;
+  });
+  const pad = 40;
+  let minX = Math.min(...boxes.map((b) => b.x)) - pad, maxX = Math.max(...boxes.map((b) => b.x + b.w)) + pad;
+  let minY = Math.min(...boxes.map((b) => b.y)) - pad, maxY = Math.max(...boxes.map((b) => b.y + b.h)) + pad;
+  // Keep a minimum canvas so a single machine is drawn at natural size, not blown up.
+  const MIN_W = 820, MIN_H = 380;
+  if (maxX - minX < MIN_W) { const c = (minX + maxX) / 2; minX = c - MIN_W / 2; maxX = c + MIN_W / 2; }
+  if (maxY - minY < MIN_H) { const c = (minY + maxY) / 2; minY = c - MIN_H / 2; maxY = c + MIN_H / 2; }
+  svg.setAttribute("viewBox", `${minX} ${minY} ${maxX - minX} ${maxY - minY}`);
+
+  const parts = [];
+  parts.push(`<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="${css("--accent")}"/></marker></defs>`);
+  // links: head <-> each worker
+  const head = boxes[0];
+  boxes.slice(1).forEach((b) => {
+    parts.push(`<line x1="${head.cx}" y1="${head.cy}" x2="${b.cx}" y2="${b.cy}" stroke="${css("--link")}" stroke-width="2" stroke-dasharray="6 5"/>`);
+    const mx = (head.cx + b.cx) / 2, my = (head.cy + b.cy) / 2;
+    parts.push(`<rect x="${mx - 58}" y="${my - 11}" width="116" height="22" rx="11" fill="${css("--panel")}" stroke="${css("--border")}"/>
+      <text x="${mx}" y="${my + 4}" text-anchor="middle" font-size="11" class="muted">LAN · network hop</text>`);
+  });
+  // node boxes
+  const anchor = new Map();
+  boxes.forEach((b) => {
+    const n = b.n;
+    parts.push(`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="14" fill="${css("--panel")}" stroke="${n.role === "head" ? css("--accent") : css("--border")}" stroke-width="${n.role === "head" ? 2 : 1.2}"/>`);
+    parts.push(`<text x="${b.x + 16}" y="${b.y + 25}" font-size="15" font-weight="700">${esc(n.name)}</text>`);
+    parts.push(`<text x="${b.x + b.w - 16}" y="${b.y + 25}" font-size="11" text-anchor="end" class="muted">${n.role === "head" ? "head · API" : "worker"}</text>`);
+    parts.push(`<text x="${b.x + 16}" y="${b.y + 43}" font-size="11" class="faint">${esc(n.host)}${n.driver_version ? " · driver " + esc(n.driver_version) : ""}</text>`);
+    if (!n.gpus.length) {
+      parts.push(`<text x="${b.x + 16}" y="${b.y + HEAD + 26}" font-size="12" class="muted">no GPU — orchestration only</text>`);
+    }
+    n.gpus.forEach((g, i) => {
+      const y = b.y + HEAD + i * ROW, x = b.x + 12, w = b.w - 24;
+      const p = plan.get(g.uuid);
+      const col = p ? stageColor(p.stage) : css("--faint");
+      parts.push(`<rect x="${x}" y="${y}" width="${w}" height="${ROW - 8}" rx="9" fill="${css("--panel-2")}" stroke="${p ? col : css("--border")}" stroke-width="${p ? 1.6 : 1}"/>`);
+      if (p) {
+        parts.push(`<circle cx="${x + 16}" cy="${y + 21}" r="11" fill="${col}"/><text x="${x + 16}" y="${y + 25}" font-size="11" font-weight="700" text-anchor="middle" fill="#fff" style="fill:#fff">${p.stage + 1}</text>`);
+      }
+      const tx = x + (p ? 34 : 12);
+      parts.push(`<text x="${tx}" y="${y + 17}" font-size="12.5" font-weight="600">${esc(short(g.name))}${g.usable ? "" : " (not served)"}</text>`);
+      const total = g.memory_total_bytes || 1;
+      const detail = p ? `layers ${p.first_layer}–${p.first_layer + p.n_layers - 1}` : `${esc(g.architecture || "")}`;
+      parts.push(`<text x="${x + w - 10}" y="${y + 17}" font-size="11" text-anchor="end" class="muted">${detail}</text>`);
+      const bx = tx, bw = x + w - 10 - tx, by = y + 26;
+      parts.push(`<rect x="${bx}" y="${by}" width="${bw}" height="6" rx="3" fill="${css("--track")}"/>`);
+      const used = Math.min(1, (g.memory_used_bytes || 0) / total);
+      if (used > 0) parts.push(`<rect x="${bx}" y="${by}" width="${bw * used}" height="6" rx="3" fill="${css("--used")}"/>`);
+      if (p) {
+        const planned = Math.min(1, p.required_bytes / total);
+        parts.push(`<rect x="${bx}" y="${by + 8}" width="${bw * planned}" height="3" rx="1.5" fill="${col}"/>`);
+      }
+      anchor.set(g.uuid, { x, y, w, h: ROW - 8 });
+    });
+  });
+  // pipeline path through the planned GPUs, in stage order
+  const devs = state.plan?.devices || [];
+  for (let i = 0; i + 1 < devs.length; i++) {
+    const a = anchor.get(devs[i].uuid), c = anchor.get(devs[i + 1].uuid);
+    if (!a || !c) continue;
+    // Leave from the source row's edge facing the target and enter the target's facing edge,
+    // so the arrow never covers GPU names.
+    const acx = a.x + a.w / 2, acy = a.y + a.h / 2, ccx = c.x + c.w / 2, ccy = c.y + c.h / 2;
+    let x1, y1, x2, y2;
+    if (Math.abs(ccy - acy) > a.h) {
+      const down = ccy > acy;
+      x1 = acx; y1 = down ? a.y + a.h : a.y;
+      x2 = ccx; y2 = down ? c.y - 4 : c.y + c.h + 4;
+    } else {
+      const right = ccx > acx;
+      x1 = right ? a.x + a.w : a.x; y1 = acy;
+      x2 = right ? c.x - 4 : c.x + c.w + 4; y2 = ccy;
+    }
+    const viaHead = devs[i].rpc_endpoint && devs[i + 1].rpc_endpoint && devs[i].node !== devs[i + 1].node;
+    let d;
+    if (viaHead) {
+      // llama.cpp RPC relays remote-to-remote transfers through the head node.
+      d = `M${x1},${y1} Q${head.cx},${head.cy + head.h / 2 + 30} ${x2},${y2}`;
+    } else {
+      const mx = (x1 + x2) / 2 + (y2 - y1) * 0.18, my = (y1 + y2) / 2 - (x2 - x1) * 0.18;
+      d = `M${x1},${y1} Q${mx},${my} ${x2},${y2}`;
+    }
+    parts.push(`<path d="${d}" fill="none" stroke="${css("--accent")}" stroke-width="2.4" stroke-dasharray="2 5" stroke-linecap="round" marker-end="url(#arrow)" opacity=".9"><title>${viaHead ? "relayed through the head node" : "activations"}</title></path>`);
+  }
+  svg.innerHTML = parts.join("");
+  $("legend").innerHTML =
+    `<span><i style="background:${css("--used")}"></i>VRAM in use (live)</span>` +
+    `<span><i style="background:${css("--s0")}"></i>planned for the model (per stage colour)</span>` +
+    `<span><i style="background:${css("--accent")}"></i>pipeline order · activations flow</span>` +
+    `<span><i style="background:${css("--link")}"></i>network link between machines</span>`;
+}
+
+// ---------------------------------------------------------------------- GPU table
+function renderGpuTable() {
+  const plan = planIndex();
+  const rows = allGpus().map((g) => {
+    const p = plan.get(g.uuid);
+    const total = g.memory_total_bytes || 1;
+    const used = (g.memory_used_bytes || 0) / total * 100;
+    const chip = p ? `<span class="chip" style="background:${stageColor(p.stage)}">${p.stage + 1}</span>` : `<span class="chip none">–</span>`;
+    const temp = g.temperature_c != null ? `${Math.round(g.temperature_c)}°C` : "–";
+    const util = g.utilization_pct != null ? `${Math.round(g.utilization_pct)}%` : "–";
+    const power = g.power_draw_w != null ? `${Math.round(g.power_draw_w)} W` : (g.board_power_w ? `≤${Math.round(g.board_power_w)} W` : "–");
+    return `<tr>
+      <td>${chip}</td>
+      <td><b>${esc(short(g.name))}</b><div class="meta">${esc(g.architecture || "?")}${g.compute_capability ? " · cc " + g.compute_capability.toFixed(1) : ""}${g.nvenc === false ? " · no NVENC" : ""}</div></td>
+      <td>${esc(g.node)} <span class="tag ${g.role === "head" ? "head" : ""}">${g.role}</span></td>
+      <td style="min-width:160px"><div class="bar"><span style="width:${used}%;background:var(--used)"></span></div>
+        <div class="meta num">${gb(g.memory_used_bytes)} / ${gb(g.memory_total_bytes)}${p ? " · plan " + gb(p.required_bytes) : ""}</div></td>
+      <td class="num">${temp}</td><td class="num">${util}</td><td class="num">${power}</td>
+      <td class="num">${g.bandwidth_gbps ? g.bandwidth_gbps + " GB/s" : "–"}</td>
+    </tr>`;
+  });
+  $("gpu-table").innerHTML = `<thead><tr><th>Stage</th><th>GPU</th><th>Node</th><th>VRAM</th><th>Temp</th><th>Util</th><th>Power</th><th>Mem BW</th></tr></thead>
+    <tbody>${rows.join("") || `<tr><td colspan="8" class="empty">No GPUs found. ${esc((state.pool.notes || []).join(" "))}</td></tr>`}</tbody>`;
+}
+
+// --------------------------------------------------------------------------- plan
+async function loadModels() {
+  const r = await fetch("/api/models");
+  const data = await r.json();
+  models = data.models; quants = data.quants;
+  $("f-model").innerHTML = models.map((m) => `<option value="${m.key}">${esc(m.name)} — ${m.params_b}B, ${m.layers} layers</option>`).join("");
+  $("f-model").value = models.find((m) => m.key === "qwen2.5-14b") ? "qwen2.5-14b" : models[0].key;
+  syncQuants();
+}
+function syncQuants() {
+  const engine = $("f-engine").value;
+  const opts = quants.filter((q) => q.engines.includes(engine));
+  $("f-quant").innerHTML = opts.map((q) => `<option value="${q.key}">${q.key}</option>`).join("");
+  $("f-quant").value = engine === "vllm" ? "awq-int4" : "q4_k_m";
+}
+$("f-engine").addEventListener("change", syncQuants);
+$("plan-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("plan-btn").disabled = true; $("plan-status").textContent = "Planning…";
+  try {
+    const r = await fetch("/api/plan", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: $("f-model").value, engine: $("f-engine").value, quant: $("f-quant").value,
+        context: Number($("f-context").value), objective: $("f-objective").value,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    state.plan = data; renderPlan(data); render();
+    $("plan-status").textContent = "";
+  } catch (err) {
+    $("plan-status").textContent = "⚠ " + err.message;
+  } finally { $("plan-btn").disabled = false; }
+});
+
+function renderPlan(p) {
+  const out = $("plan-out");
+  out.dataset.rendered = "1";
+  const tps = p.est_decode_tokens_per_s;
+  const total = p.layer_counts.reduce((a, b) => a + b, 0);
+  const strip = p.devices.map((d, i) =>
+    `<div style="flex:${d.n_layers};background:${stageColor(i)}" title="${esc(short(d.name))}: layers ${d.first_layer}–${d.first_layer + d.n_layers - 1}">${d.n_layers >= total * 0.08 ? esc(short(d.name)) + " · " + d.n_layers : d.n_layers}</div>`).join("");
+  const stages = p.devices.map((d, i) => `<tr>
+      <td><span class="chip" style="background:${stageColor(i)}">${i + 1}</span></td>
+      <td><b>${esc(short(d.name))}</b><div class="meta">${d.node && d.node !== "local" ? "on " + esc(d.node) : "local"}${d.rpc_endpoint ? " · rpc " + esc(d.rpc_endpoint) : ""}</div></td>
+      <td class="num">${d.first_layer}–${d.first_layer + d.n_layers - 1}</td>
+      <td class="num">${gb(d.required_bytes)} / ${gb(d.capacity_bytes)}</td>
+      <td class="num" style="color:var(${d.headroom_bytes < 0 ? "--fail" : "--ok"})">${gb(d.headroom_bytes)}</td></tr>`).join("");
+  const alts = (p.alternatives || []).map((a) => `<tr>
+      <td><span class="status ${a.fits ? "ok" : "fail"}">${a.fits ? "fits" : "no"}</span></td>
+      <td>${a.names.map(short).map(esc).join(" + ")}</td>
+      <td class="num">${a.est_decode_tokens_per_s ? "~" + Math.round(a.est_decode_tokens_per_s) + " tok/s" : "–"}</td>
+      <td class="num">${Math.round(a.worst_utilisation * 100)}%</td></tr>`).join("");
+  const warns = (p.warnings || []).map((w) => `<li class="warn">${esc(w)}</li>`).join("");
+  out.innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><small>Fits</small><b class="${p.fits ? "" : ""}" style="color:var(${p.fits ? "--ok" : "--fail"})">${p.fits ? "Yes" : "No"}</b></div>
+      <div class="kpi"><small>Est. single-stream</small><b class="num">${tps ? "~" + Math.round(tps) + " tok/s" : "–"}</b></div>
+      <div class="kpi"><small>Max context here</small><b class="num">${p.max_context.toLocaleString()}</b></div>
+    </div>
+    <div class="hint">${esc(p.model.name)} · ${gb(p.model.weights_bytes)} weights · ${p.model.n_layers} layers · ${esc(p.engine)} · objective ${esc(p.objective)}</div>
+    <div class="strip" role="img" aria-label="Layer split">${strip}</div>
+    <div class="strip-scale"><span>layer 0</span><span>layer ${total - 1}</span></div>
+    <h3>Stages</h3>
+    <div class="table-wrap"><table><thead><tr><th></th><th>GPU</th><th>Layers</th><th>Needs / has</th><th>Headroom</th></tr></thead><tbody>${stages}</tbody></table></div>
+    ${warns ? `<ul class="notes">${warns}</ul>` : ""}
+    ${alts ? `<h3>GPU sets considered</h3><div class="table-wrap"><table><thead><tr><th></th><th>GPUs</th><th>Speed</th><th>Fullest GPU</th></tr></thead><tbody>${alts}</tbody></table></div>` : ""}
+    <h3>Launch</h3>
+    <pre class="cmd mono" id="launch-cmd">${esc(p.launch.command)}</pre>
+    <div class="row" style="margin-top:8px"><button class="btn ghost" type="button" id="copy-cmd">Copy command</button>
+      <span class="hint">Run it on the head node, then use the Chat tab.</span></div>`;
+  $("copy-cmd").onclick = async () => {
+    try { await navigator.clipboard.writeText(p.launch.command); $("copy-cmd").textContent = "Copied"; }
+    catch { $("copy-cmd").textContent = "Select the text above to copy"; }
+  };
+}
+
+// ------------------------------------------------------------------------- health
+function renderHealth() {
+  const h = state.health;
+  const out = $("health-out");
+  if (!h) { out.innerHTML = `<div class="empty">No health data. ${esc((state.pool.notes || []).join(" "))}</div>`; return; }
+  const pw = h.power;
+  const pct = Math.min(100, (pw.sustained_watts / pw.psu_watts) * 100);
+  const lim = (pw.limit_watts / pw.psu_watts) * 100;
+  const [lo, hi] = h.driver_window;
+  const findings = h.findings.map((f) => `<li class="${f.severity}">${esc(f.message)}</li>`).join("");
+  const notes = (state.pool.notes || []).map((n) => `<li>${esc(n)}</li>`).join("");
+  out.innerHTML = `
+    <div class="row"><span class="status ${h.status === "fail" ? "fail" : h.status === "warn" ? "warn" : "ok"}">${h.status.toUpperCase()}</span>
+      <span class="hint">GPUs on the head node / chassis</span></div>
+    <div class="kpis">
+      <div class="kpi"><small>Driver branch needed</small><b class="num">R${lo} – ${hi ? "R" + hi : "current"}</b></div>
+      <div class="kpi"><small>CUDA build archs</small><b class="mono">${esc(h.cuda_architectures || "–")}</b></div>
+      <div class="kpi"><small>Recommended PSU</small><b class="num">≥ ${pw.recommended_psu_watts} W</b></div>
+    </div>
+    <h3>Chassis power</h3>
+    <div class="meter" title="sustained vs PSU rating"><span style="width:${pct}%;background:var(${pw.ok ? "--accent" : "--fail"})"></span><i style="left:${lim}%"></i></div>
+    <div class="meta num">${Math.round(pw.sustained_watts)} W sustained · ${Math.round(pw.peak_watts)} W peak · PSU ${pw.psu_watts} W (orange mark = ${Math.round(pw.limit_watts)} W sustained limit)</div>
+    ${findings ? `<h3>Findings</h3><ul class="notes">${findings}</ul>` : `<ul class="notes"><li class="ok">No compatibility findings.</li></ul>`}
+    ${notes ? `<h3>Pool notes</h3><ul class="notes">${notes}</ul>` : ""}`;
+}
+
+// --------------------------------------------------------------------------- chat
+const chat = [];
+function renderChatState() {
+  const e = state.engine;
+  $("chat-state").innerHTML = e.online
+    ? `Connected to <span class="mono">${esc(e.url)}</span>${e.model ? " · " + esc(e.model) : ""}`
+    : `No engine at <span class="mono">${esc(e.url)}</span>. Plan a model, run the launch command on the head node, and it will appear here.`;
+  $("chat-send").disabled = !e.online;
+}
+function drawChat() {
+  $("chat-log").innerHTML = chat.map((m) => `<div class="msg ${m.role}">${esc(m.content)}${m.meta ? `<div class="meta">${esc(m.meta)}</div>` : ""}</div>`).join("");
+  $("chat-log").scrollTop = $("chat-log").scrollHeight;
+}
+$("chat-clear").onclick = () => { chat.length = 0; drawChat(); };
+$("chat-input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("chat-form").requestSubmit(); } });
+$("chat-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = $("chat-input").value.trim();
+  if (!text) return;
+  $("chat-input").value = "";
+  chat.push({ role: "user", content: text });
+  const reply = { role: "assistant", content: "" };
+  chat.push(reply); drawChat();
+  $("chat-send").disabled = true;
+  const t0 = performance.now(); let tokens = 0;
+  try {
+    const r = await fetch("/api/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: chat.filter((m) => m !== reply && m.role !== "error").map(({ role, content }) => ({ role, content })) }),
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (payload === "[DONE]") continue;
+        try {
+          const delta = JSON.parse(payload).choices?.[0]?.delta?.content;
+          if (delta) { reply.content += delta; tokens++; drawChat(); }
+        } catch { /* keep-alive or partial line */ }
+      }
+    }
+    const secs = (performance.now() - t0) / 1000;
+    reply.meta = `${tokens} chunks · ${(tokens / secs).toFixed(1)} tok/s measured`;
+  } catch (err) {
+    reply.role = "error"; reply.content = "⚠ " + err.message;
+  } finally { drawChat(); $("chat-send").disabled = !state?.engine?.online; }
+});
+
+// ------------------------------------------------------------------------ tabs/boot
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+  document.querySelectorAll(".tabpanel").forEach((p) => { p.hidden = p.id !== "tab-" + b.dataset.tab; });
+}));
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => state && render());
+loadModels().then(poll);
+setInterval(() => { if (!document.hidden) poll(); }, 2500);
+</script>
+</body>
+</html>

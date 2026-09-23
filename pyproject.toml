@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "astra-node"
+version = "0.4.1"
+description = "ASTRA control plane: discovery, validation, VRAM-pooling planner and telemetry for an external PCIe GPU node (JBOG)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "ASTRA Engineering" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+]
+# The core control plane is deliberately stdlib-only (ADR-0005).
+dependencies = []
+
+[project.optional-dependencies]
+ray = ["ray[default]>=2.9"]
+# Linters pinned so CI formats/type-checks exactly like developer machines.
+dev = ["pytest>=8", "pytest-cov>=5", "ruff==0.16.8", "mypy==2.3.1"]
+
+[project.scripts]
+astra = "astra.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+astra = ["ui/static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "hardware: requires a real NVIDIA driver / GPU (skipped automatically when absent)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src/astra"]
+
+[[tool.mypy.overrides]]
+module = ["ray", "ray.*"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["astra"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+skip_covered = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]

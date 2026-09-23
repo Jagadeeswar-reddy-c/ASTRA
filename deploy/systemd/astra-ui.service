@@ -1,0 +1,21 @@
+[Unit]
+Description=ASTRA web console (topology, planning, health, chat)
+Documentation=file:///opt/astra/docs/06-deployment/deployment-guide.md
+After=network-online.target astra-exporter.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=astra
+Group=astra
+# Localhost only; reach it over an SSH tunnel or an authenticating reverse proxy.
+ExecStart=/opt/astra/venv/bin/astra --config /etc/astra/astra.toml ui --host 127.0.0.1 --port 9838 --cluster --engine-url http://127.0.0.1:8080
+Restart=on-failure
+RestartSec=5
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

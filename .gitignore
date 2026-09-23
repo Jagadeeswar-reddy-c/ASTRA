@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+reports/
+
+# Local runtime artefacts
+astra.toml
+plan*.json
+deploy/compose/.env
+deploy/compose/.env.*
+!deploy/compose/.env.example
+models/
+*.gguf
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

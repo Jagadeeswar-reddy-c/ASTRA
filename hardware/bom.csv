@@ -1,0 +1,12 @@
+id,category,component,specification,qty,unit_eur_min,unit_eur_max,purpose,change_vs_concept
+BOM-01,Host interface,M.2 Key-M to OCuLink 4i adapter,PCIe Gen4-rated with ReDriver; 2280 form factor,1,25,35,Breaks the host M.2 x4 lanes out to SFF-8611,unchanged
+BOM-02,Interconnect,OCuLink SFF-8611 to SFF-8611 cable,Shielded; PCIe 4.0 rated; 0.5 m preferred / 1.0 m max,1,15,20,Low-loss transmission line,length guidance added (DR-14)
+BOM-03,Chassis interface,OCuLink SFF-8611 to PCIe x16 slot receiver (x4 electrical),Powered via SATA/6-pin from chassis PSU,1,20,35,Terminates the cable at the switch board upstream,ADDED (DR-04)
+BOM-04,Chassis switch,PCIe switch backplane PLX PEX8747,x16 upstream (x4 used); 2-4 x16 downstream slots; Gen3; 12 V feed rated >= 2x75 W + switch,1,90,140,Multiplexes the uplink to independent GPU endpoints,power-feed rating specified (DR-04)
+BOM-05,Power supply,ATX PSU 80+ Gold fully modular - size with `astra compat` (650 W default),650 W covers up to ~430 W of GPU board power; >= one PCIe 8-pin per GPU; 24-pin; SATA,1,65,85,Powers backplane slots + GPU aux + receiver + fans,sized per GPU set (CR-001)
+BOM-06,Power sync,Dual-PSU sync relay (Add2PSU type),Solid-state; SATA/Molex sense from host; switches chassis PS_ON,1,8,12,Chassis powers on/off with host,unchanged
+BOM-07,Enclosure,Open-frame aluminium GPU test bench,ATX PSU mount; >= 1 slot gap between GPUs; ESD-safe feet,1,30,45,Structure and airflow,unchanged
+BOM-08,Cooling,120 mm PWM fan 1800 rpm,4-pin; powered from chassis PSU via Molex/SATA adapter,2,7.5,10,Forced air across GPU intakes and switch heatsink,unchanged
+BOM-09,Power distribution,Surge-protected power strip (single outlet),>= 4 sockets; earthed,1,12,20,Common protective earth for host + chassis PSU,ADDED (DR-10)
+BOM-10,Cabling,Cable ties / Velcro + M3 standoffs kit,,1,5,8,Strain relief for OCuLink and PCIe power cables,ADDED
+BOM-11,Tooling (one-off),ATX PSU tester + ESD wrist strap,,1,12,18,Cold checks before first power-on (TC-HW-02); assembly safety,ADDED (R-12)

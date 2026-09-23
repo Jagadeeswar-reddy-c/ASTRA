@@ -1,0 +1,75 @@
+# Alert rules. Runbook links point at docs/07-operations/runbooks.md anchors.
+groups:
+  - name: astra-node
+    rules:
+      - alert: AstraExporterDown
+        expr: up{job="astra-node"} == 0 or astra_up == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "ASTRA exporter or NVIDIA driver not responding on {{ $labels.node }}"
+          runbook: "docs/07-operations/runbooks.md#rb-01-gpu-missing--driver-down"
+
+      - alert: AstraGpuMissing
+        expr: astra_gpu_count < astra_gpu_expected_count
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.node }}: {{ $value }} GPUs visible, fewer than configured"
+          runbook: "docs/07-operations/runbooks.md#rb-01-gpu-missing--driver-down"
+
+      - alert: AstraUplinkDegraded
+        expr: min by (node) (astra_path_bottleneck_link_width) < 4
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.node }}: OCuLink uplink trained below x4"
+          runbook: "docs/07-operations/runbooks.md#rb-02-degraded-link"
+
+      - alert: AstraPcieReplays
+        expr: increase(astra_gpu_pcie_replay_total[10m]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "GPU {{ $labels.gpu }} on {{ $labels.node }} is retrying PCIe packets"
+          runbook: "docs/07-operations/runbooks.md#rb-03-pcie-errors"
+
+      - alert: AstraAerUncorrectable
+        expr: increase(astra_path_aer_errors_total{severity=~"nonfatal|fatal"}[10m]) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: "Uncorrectable PCIe errors on the path to GPU {{ $labels.gpu }}"
+          runbook: "docs/07-operations/runbooks.md#rb-03-pcie-errors"
+
+      - alert: AstraGpuHot
+        expr: astra_gpu_temperature_celsius > 83
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "GPU {{ $labels.gpu }} at {{ $value }}°C for 5 minutes"
+          runbook: "docs/07-operations/runbooks.md#rb-04-thermal"
+
+      - alert: AstraGpuFaultSlowdown
+        expr: astra_gpu_clock_event_active{reason=~"hw_slowdown|hw_thermal_slowdown|hw_power_brake_slowdown|sw_thermal_slowdown"} == 1
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "GPU {{ $labels.gpu }} clock slowdown: {{ $labels.reason }}"
+          runbook: "docs/07-operations/runbooks.md#rb-04-thermal"
+
+      - alert: AstraChassisPowerHigh
+        # Measured chassis draw above the configured sustained ceiling (PSU x max ratio,
+        # e.g. 650 W x 0.7 = 455 W) leaves no room for transients. Works for any GPU mix.
+        expr: astra_chassis_power_watts > on(node) astra_chassis_power_limit_watts
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.node }}: GPUs drawing {{ $value }} W on the chassis PSU"
+          runbook: "docs/07-operations/runbooks.md#rb-05-power"
+
+      - alert: AstraChassisUndersized
+        # The installed GPUs' rated power exceeds what the configured PSU should carry.
+        expr: astra_chassis_rated_power_watts > on(node) astra_chassis_power_limit_watts
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.node }}: installed GPUs are rated {{ $value }} W, above the PSU's sustained limit"
+          runbook: "docs/07-operations/runbooks.md#rb-05-power"

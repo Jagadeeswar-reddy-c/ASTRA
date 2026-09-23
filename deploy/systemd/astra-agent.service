@@ -1,0 +1,26 @@
+[Unit]
+Description=ASTRA Fabric agent (advertise GPUs, serve them over llama.cpp RPC)
+Documentation=file:///opt/astra/docs/06-deployment/deployment-guide.md
+After=network-online.target nvidia-persistenced.service astra-selftest.service
+Wants=network-online.target
+# Never serve GPUs from a node whose link gate failed.
+Requires=astra-selftest.service
+
+[Service]
+Type=simple
+User=astra
+Group=astra
+# rpc-server must be on PATH (llama.cpp built with -DGGML_CUDA=ON -DGGML_RPC=ON).
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/astra/venv/bin/astra --config /etc/astra/astra.toml agent --rpc
+Restart=always
+RestartSec=5
+StateDirectory=astra
+WorkingDirectory=/var/lib/astra
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

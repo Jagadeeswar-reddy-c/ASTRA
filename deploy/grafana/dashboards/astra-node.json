@@ -1,0 +1,431 @@
+{
+  "uid": "astra-node",
+  "title": "ASTRA node",
+  "tags": [
+    "astra",
+    "gpu"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Exporter / driver up",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "astra-prom"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "min(astra_up)",
+          "legendFormat": "up"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "title": "GPUs visible / expected",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "astra-prom"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 5,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(astra_gpu_count)",
+          "legendFormat": "visible"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(astra_gpu_expected_count)",
+          "legendFormat": "expected"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Uplink (slowest hop)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "astra-prom"
+      },
+      "gridPos": {
+        "x": 9,
+        "y": 0,
+        "w": 5,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "min(astra_path_bottleneck_link_width)",
+          "legendFormat": "lanes"
+        },
+        {
+          "refId": "B",
+          "expr": "min(astra_path_bottleneck_link_gen)",
+          "legendFormat": "gen"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "title": "Uplink bandwidth",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "astra-prom"
+      },
+      "gridPos": {
+        "x": 14,
+        "y": 0,
+        "w": 5,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "min(astra_path_bottleneck_bandwidth_bytes)",
+          "legendFormat": "one-way"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "title": "Chassis GPU power",
+      "type": "gauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "astra-prom"
+      },
+      "gridPos": {
+        "x": 19,
+        "y": 0,
+        "w": 5,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(astra_gpu_power_watts)",
+          "legendFormat": "total"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "max": 650,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 455
+              },
+              {
+                "color": "red",
+                "value": 585
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "title": "VRAM used",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "astra-prom"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "astra_gpu_memory_used_bytes",
+          "legendFormat": "GPU {{gpu}} used"
+        },
+        {
+          "refId": "B",
+          "expr": "astra_gpu_memory_total_bytes",
+          "legendFormat": "GPU {{gpu}} total"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "title": "GPU utilisation",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "astra-prom"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "astra_gpu_utilization_ratio",
+          "legendFormat": "GPU {{gpu}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "title": "Temperature",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "astra-prom"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "astra_gpu_temperature_celsius",
+          "legendFormat": "GPU {{gpu}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 87
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 9,
+      "title": "Board power",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "astra-prom"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "astra_gpu_power_watts",
+          "legendFormat": "GPU {{gpu}}"
+        },
+        {
+          "refId": "B",
+          "expr": "astra_gpu_power_limit_watts",
+          "legendFormat": "GPU {{gpu}} limit"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 10,
+      "title": "PCIe replays (10m increase)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "astra-prom"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "increase(astra_gpu_pcie_replay_total[10m])",
+          "legendFormat": "GPU {{gpu}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 11,
+      "title": "AER errors on path (10m increase)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "astra-prom"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 20,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "increase(astra_path_aer_errors_total[10m])",
+          "legendFormat": "GPU {{gpu}} {{severity}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 12,
+      "title": "Active clock events",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "astra-prom"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 20,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "astra_gpu_clock_event_active == 1",
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}
