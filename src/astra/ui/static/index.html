@@ -261,6 +261,13 @@ function syncForm(p) {
   const m = /^catalog:([^/]+)\/(.+)$/.exec(p.model.source || "");
   $("f-engine").value = p.engine; syncQuants();
   if (m) { $("f-model").value = m[1]; $("f-quant").value = m[2]; }
+  else if ((p.model.source || "").startsWith("gguf:")) {
+    // Plans from a GGUF file (CLI): show the file as the selected model.
+    const file = p.model.source.slice(5).split(/[\\/]/).pop();
+    let opt = $("f-model").querySelector("option[data-gguf]");
+    if (!opt) { opt = document.createElement("option"); opt.dataset.gguf = "1"; $("f-model").prepend(opt); }
+    opt.value = ""; opt.textContent = `${file} (from CLI plan)`; opt.selected = true;
+  }
   $("f-context").value = p.context; $("f-objective").value = p.objective;
 }
 

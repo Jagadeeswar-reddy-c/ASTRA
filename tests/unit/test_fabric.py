@@ -192,7 +192,7 @@ def test_llamacpp_launch_over_rpc() -> None:
     spec = engines.llamacpp(result, "/m.gguf")
     argv = list(spec.argv)
     assert argv[argv.index("--rpc") + 1] == "10.0.0.7:50052"
-    assert argv[argv.index("--device") + 1] == "CUDA0,RPC[10.0.0.7:50052]"
+    assert argv[argv.index("--device") + 1] == "CUDA0,RPC0"
     assert spec.env["CUDA_VISIBLE_DEVICES"] == result.placements[0].device.uuid
     assert any("--list-devices" in n for n in spec.notes)
 
@@ -256,7 +256,7 @@ def test_cli_simulated_fabric(no_config: Path, capsys: pytest.CaptureFixture[str
     )
     out = capsys.readouterr().out
     assert code == 0 and "@desktop RTX 3060 Ti" in out
-    assert "--rpc desktop:50052" in out and "RPC[desktop:50052]" in out
+    assert "--rpc desktop:50052" in out and "RPC0" in out
     assert cli.main(["plan", "--simulate", "@desktop", "--model", "qwen2.5-14b"]) == 2
 
 

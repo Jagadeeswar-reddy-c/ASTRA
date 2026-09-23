@@ -26,7 +26,6 @@ import json
 import logging
 import os
 import platform
-import shutil
 import subprocess
 import sys
 import time
@@ -431,15 +430,18 @@ def cmd_agent(args: argparse.Namespace, cfg: AstraConfig) -> int:
     bind = args.bind or fab.bind
     supervisor, rpc_ports = None, {}
     if args.rpc:
-        binary = args.rpc_binary or fab.rpc_binary
-        if shutil.which(binary) is None:
+        from astra.fabric.agent import find_rpc_server
+
+        binary = find_rpc_server(args.rpc_binary or fab.rpc_binary)
+        if binary is None:
             raise AstraError(
-                f"'{binary}' not found: build llama.cpp with -DGGML_CUDA=ON -DGGML_RPC=ON "
-                "and put rpc-server on PATH (or pass --rpc-binary)"
+                f"'{args.rpc_binary or fab.rpc_binary}' not found (nor ggml-rpc-server): "
+                "build llama.cpp with -DGGML_CUDA=ON -DGGML_RPC=ON and put it on PATH, "
+                "or pass --rpc-binary"
             )
         specs = rpc_server_specs(
             probe(with_topology=False).gpus,
-            args.rpc_binary or fab.rpc_binary,
+            binary,
             bind,
             fab.rpc_port_base,
         )
@@ -634,7 +636,7 @@ def _add_plan_args(p: argparse.ArgumentParser) -> None:
         help="hypothetical GPUs: a preset (" + ", ".join(pool.SIMULATION_PRESETS) + ") or a list "
         "like 'RTX 3060, GT 1030, 2x GTX 1660 SUPER' (name[:mib[:arch]])",
     )
-    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--host", default="127.0.0.1", help="engine listen address (0.0.0.0 exposes it)")
     p.add_argument("--port", type=int)
     p.add_argument("--binary", help="engine executable (default llama-server / vllm)")
     fab = p.add_argument_group("fabric (GPUs on other machines, ADR-0011)")

@@ -41,8 +41,9 @@ def _gpu_env(plan: Plan) -> dict[str, str]:
 def llamacpp_devices(plan: Plan) -> tuple[list[str], list[str]]:
     """(RPC endpoints, llama.cpp device names) in pipeline order.
 
-    Local GPUs are CUDA0..n in CUDA_VISIBLE_DEVICES order; each remote GPU is the
-    device its rpc-server exposes, named RPC[host:port].
+    Local GPUs are CUDA0..n in CUDA_VISIBLE_DEVICES order. llama.cpp names remote
+    devices RPC0, RPC1, ... in the order of the --rpc list (verified with llama.cpp
+    b11149 `--list-devices`; field test FT-01). One rpc-server serves one GPU.
     """
     endpoints: list[str] = []
     devices: list[str] = []
@@ -51,7 +52,7 @@ def llamacpp_devices(plan: Plan) -> tuple[list[str], list[str]]:
         if p.device.rpc_endpoint:
             if p.device.rpc_endpoint not in endpoints:
                 endpoints.append(p.device.rpc_endpoint)
-            devices.append(f"RPC[{p.device.rpc_endpoint}]")
+            devices.append(f"RPC{endpoints.index(p.device.rpc_endpoint)}")
         else:
             devices.append(f"CUDA{local}")
             local += 1
@@ -61,7 +62,7 @@ def llamacpp_devices(plan: Plan) -> tuple[list[str], list[str]]:
 def llamacpp(
     plan: Plan,
     model_path: str,
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8080,
     binary: str = "llama-server",
 ) -> LaunchSpec:
@@ -104,7 +105,7 @@ def llamacpp(
 def vllm(
     plan: Plan,
     model_ref: str | None = None,
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8000,
     binary: str = "vllm",
 ) -> LaunchSpec:

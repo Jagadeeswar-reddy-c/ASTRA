@@ -5,6 +5,18 @@ versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-09-24 — Stage-0 field test fixes
+
+Field test on real hardware (RTX 3060 Ti, llama.cpp b11149): planner speed within
+2–7 %, runtime gate 5/5, fabric over llama.cpp RPC working end-to-end.
+Report: docs/05-testing/reports/stage0-field-test.md.
+
+### Fixed
+- FT-01: fabric launch used `RPC[host:port]` device names; llama.cpp uses `RPC0, RPC1, …`.
+- FT-02: agent finds the renamed `ggml-rpc-server` binary automatically.
+- FT-03: generated engine commands bind to 127.0.0.1 by default (was 0.0.0.0).
+- FT-04: console form shows plans made from a GGUF file.
+
 ## [0.4.1] — 2026-09-23
 
 ### Added

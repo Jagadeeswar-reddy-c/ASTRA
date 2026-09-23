@@ -85,7 +85,7 @@ of this, plus the PSU size, for any list of cards.
 | 0 Governance / 1 Requirements | G0, G1 | Documented; awaiting sponsor sign-off |
 | 2 Architecture / 3 Solution design | G2, G3 | Documented; design review raised 20 findings (15 + 5 from CR-001) |
 | 4 Development | G4 | Control plane v0.4.0 (CR-001 any GPU mix, CR-003 fabric, CR-004 web console); 171 tests, 90 % coverage, all checks green locally (CI workflow defined, not yet run on a remote) |
-| 5 Testing | G5 | Automated suite green; hardware acceptance (TC-HW) pending assembly |
+| 5 Testing | G5 | Automated suite green; **Stage-0 field test PASS on real hardware** (speed estimate within 2–7 %, [report](docs/05-testing/reports/stage0-field-test.md)); chassis tests (TC-HW) pending |
 | 6 Deployment / 7 Operations | G6, G7 | Artefacts ready; pending hardware |
 
 ## Requirements

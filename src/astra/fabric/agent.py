@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import socket
 import subprocess
 import threading
@@ -27,6 +28,19 @@ from astra.fabric.protocol import DISCOVER_MESSAGE, PROTOCOL, NodeDescriptor
 from astra.hardware.models import GpuInfo
 
 log = logging.getLogger("astra.agent")
+
+
+# llama.cpp renamed rpc-server to ggml-rpc-server (field test FT-02, build b11149).
+RPC_SERVER_NAMES = ("rpc-server", "ggml-rpc-server")
+
+
+def find_rpc_server(preferred: str) -> str | None:
+    """Resolve the rpc-server executable: the configured name/path, else known names."""
+    for candidate in (preferred, *RPC_SERVER_NAMES):
+        found = shutil.which(candidate)
+        if found:
+            return found
+    return None
 
 
 @dataclass(frozen=True)
