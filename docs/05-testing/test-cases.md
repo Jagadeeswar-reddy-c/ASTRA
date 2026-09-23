@@ -31,6 +31,7 @@ defect link), **B** = blocked.
 | TC-SW-22 | CLI: simulated `@node` GPUs, `astra cluster` and `plan --peers` against a live agent, GPU-less head, missing rpc-server binary | `test_fabric.py` (CLI) | FR-16, FR-17, FR-18 | P |
 | TC-SW-23 | Console API: self-contained page, topology/state, plan becomes active, input validation, models, chat streamed through a proxy to a fake engine, engine offline → 503 | `tests/unit/test_ui.py` | FR-19, NFR-13 | P |
 | TC-SW-24 | Console visual check: light and dark themes, 1440 px and narrow widths, single-node and 3-node fabric with a 3-stage plan | Headless browser screenshots (`docs/images/`) | FR-19 | P (manual review) |
+| TC-SW-25 | `astra auto`: recommendation ranking, CUDA build choice, llama.cpp release selection and extraction, config create/match/change, nvidia-smi topo parsing and L04 fallback, dry run | `tests/unit/test_auto.py` | FR-20 | P |
 
 ## B. Hardware acceptance (reference node)
 
@@ -60,6 +61,7 @@ defect link), **B** = blocked.
 | TC-RT-05 | Engine recovery | `kill -9` the engine (systemd variant) or `docker kill` (compose) | Serving again within 60 s with no manual action | NFR-10 | |
 | TC-RT-06 | Self-test gate | Set a wrong `expected_gpu` in `/etc/astra/astra.toml`; reboot | `astra-selftest` fails and `astra-inference` does not start; restore the config → starts | FR-10 | |
 | TC-RT-00 | Stage 0 on a single PC (field-test-plan) | Real llama.cpp + GGUF; planned vs measured speed and memory; runtime gate; console chat; fabric over RPC loopback | Speed within ±30 %, R01–R05 PASS, chat works | FR-03, FR-04, FR-05, FR-17, FR-19 | **P** (2026-09-24, [report](reports/stage0-field-test.md)) |
+| TC-RT-10 | `astra auto` on a real machine | Run `astra auto` with no arguments | Detects all GPUs, writes config, recommends, downloads if needed, launches, speed within ±30 %, gate PASS | FR-20 | **P** (2026-09-24, RTX 3060 Ti: Qwen2.5-7B Q4_K_M, 74.4 vs 73 tok/s, 5/5) |
 | TC-RT-08 | Fabric: two machines | Machine B: `astra agent --rpc`; head: `astra cluster` then `astra plan --cluster --gguf <14B> --output plan.json`; launch; chat completions; `astra validate --phase runtime` on each node | Both nodes listed; plan uses GPUs on both; completions correct; per-token latency within 20 % of the estimate | FR-16, FR-17 | |
 | TC-RT-09 | Fabric resilience | Kill a node's rpc-server | Agent restarts it within 10 s; llama-server reports an error rather than wrong output; service recovers after restart | NFR-10 | |
 | TC-RT-07 | Ray elastic pool | `start_pool()`; submit 20 tasks with `resources={"gpu_ampere":1}` and 20 with `num_gpus=1` | Ampere tasks run only on the 3050; others spread across both | FR-09 | |

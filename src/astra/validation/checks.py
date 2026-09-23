@@ -119,8 +119,37 @@ def _node_gpus(ctx: LinkContext) -> list[GpuInfo]:
     return behind or list(ctx.inventory.gpus)
 
 
+def _switch_from_nvtopo(ctx: LinkContext) -> CheckResult | None:
+    """Without sysfs (Windows), use nvidia-smi topo -m: PIX/PXB between every pair."""
+    from astra.hardware.nvtopo import SWITCH_LINKS
+
+    links = ctx.inventory.gpu_links
+    if not links:
+        return None
+    title = "PCIe packet switch present"
+    shared = sorted(k for k, v in links.items() if v in SWITCH_LINKS)
+    if len(shared) == len(links):
+        return _r(
+            "L04",
+            title,
+            Status.PASS,
+            f"all {len(ctx.inventory.gpus)} GPUs share a PCIe switch (nvidia-smi topo)",
+            "FR-02",
+        )
+    kinds = ", ".join(f"GPU{i}-GPU{j}:{v}" for (i, j), v in sorted(links.items()))
+    status = Status.FAIL if ctx.config.interconnect.require_switch else Status.PASS
+    detail = f"not all GPUs behind one switch ({kinds}; nvidia-smi topo)"
+    if not ctx.config.interconnect.require_switch:
+        detail = f"no switch required by config ({kinds})"
+    return _r("L04", title, status, detail, "FR-02")
+
+
 def check_switch(ctx: LinkContext) -> CheckResult:
     title = "PCIe packet switch present"
+    if not ctx.inventory.paths:
+        fallback = _switch_from_nvtopo(ctx)
+        if fallback is not None:
+            return fallback
     if not ctx.topology_expected or not ctx.inventory.paths:
         return _r(
             "L04", title, Status.SKIP, "PCIe topology unavailable (needs Linux sysfs)", "FR-02"

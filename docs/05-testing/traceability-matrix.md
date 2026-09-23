@@ -23,6 +23,7 @@ Requirement → design → implementation → verification. Updated at every gat
 | FR-17 | ADR-0011, ADR-0010 | `fabric/cluster.py`, `planner/split.py` (node hops), `planner/engines.py` (`--rpc`/`--device`) | TC-SW-21; TC-RT-08 | SW verified; multi-host pending |
 | FR-18 | ADR-0011 | `cli._budgets` (GPU-less head) | TC-SW-22 | Verified |
 | FR-19 | ADR-0012 | `astra/ui/server.py`, `astra/ui/static/index.html`, `astra/pool.py` | TC-SW-23, 24 | Verified (simulated + real GPU) |
+| FR-20 | ADR-0013 | `astra/auto.py`, `hardware/nvtopo.py`, `astra/asbuilt.py` | TC-SW-25; TC-RT-10 | Verified (real PC) |
 | NFR-01 | HW-SDD §2, §3.4 | L07, L08, L09, R05; alerts `AstraPcieReplays`, `AstraAerUncorrectable` | TC-HW-05; TC-RT-04 | Pending node |
 | NFR-02 | HW-SDD §4 | L10, R04; alerts `AstraGpuHot`, `AstraGpuFaultSlowdown` | TC-HW-07; TC-RT-04 | Pending node |
 | NFR-03 | HW-SDD §3.1, §3.3 | `setup-host.sh` step 4; alert `AstraChassisPowerHigh` | TC-HW-03, 08, 09 | Pending node |

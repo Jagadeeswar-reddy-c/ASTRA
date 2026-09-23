@@ -8,7 +8,7 @@ quantization format, or exactly from a GGUF file's tensor table.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from astra.errors import PlanningError
@@ -29,6 +29,9 @@ class Architecture:
     vocab: int
     tied_embeddings: bool = False
     awq_repo: str | None = None  # pre-quantized checkpoint for vLLM, when one is published
+    # GGUF downloads for llama.cpp: https://huggingface.co/<gguf_repo>/resolve/main/<stem>-<Q>.gguf
+    gguf_repo: str | None = None
+    gguf_stem: str | None = None
 
 
 @dataclass(frozen=True)
@@ -109,6 +112,33 @@ CATALOG: dict[str, Architecture] = {
         ),
     )
 }
+
+_GGUF_SOURCES = {
+    "llama-3.2-3b": ("bartowski/Llama-3.2-3B-Instruct-GGUF", "Llama-3.2-3B-Instruct"),
+    "llama-3.1-8b": ("bartowski/Meta-Llama-3.1-8B-Instruct-GGUF", "Meta-Llama-3.1-8B-Instruct"),
+    "mistral-7b": ("bartowski/Mistral-7B-Instruct-v0.3-GGUF", "Mistral-7B-Instruct-v0.3"),
+    "qwen2.5-7b": ("bartowski/Qwen2.5-7B-Instruct-GGUF", "Qwen2.5-7B-Instruct"),
+    "qwen2.5-14b": ("bartowski/Qwen2.5-14B-Instruct-GGUF", "Qwen2.5-14B-Instruct"),
+}
+CATALOG = {
+    k: replace(a, gguf_repo=_GGUF_SOURCES[k][0], gguf_stem=_GGUF_SOURCES[k][1])
+    if k in _GGUF_SOURCES
+    else a
+    for k, a in CATALOG.items()
+}
+# Quantizations with published GGUF files (the file-name tag for each).
+GGUF_QUANT_TAGS = {"q4_k_m": "Q4_K_M", "q5_k_m": "Q5_K_M", "q6_k": "Q6_K", "q8_0": "Q8_0"}
+
+
+def gguf_download(arch_key: str, quant_key: str) -> tuple[str, str] | None:
+    """(file name, URL) of a published GGUF for a catalog model, or None."""
+    arch = CATALOG.get(arch_key)
+    tag = GGUF_QUANT_TAGS.get(quant_key)
+    if arch is None or tag is None or not arch.gguf_repo or not arch.gguf_stem:
+        return None
+    name = f"{arch.gguf_stem}-{tag}.gguf"
+    return name, f"https://huggingface.co/{arch.gguf_repo}/resolve/main/{name}"
+
 
 QUANTS: dict[str, Quant] = {
     q.key: q

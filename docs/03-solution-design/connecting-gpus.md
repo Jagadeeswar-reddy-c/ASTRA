@@ -141,7 +141,9 @@ strip, and the second PSU must switch on with (or before) the PC (hardware desig
 6. **Freeze the as-built config:** `astra probe --emit-config > astra.toml` (Linux:
    `/etc/astra/astra.toml`), then `astra validate`. On Linux L04/L05/L08 also check
    the switch, the link widths and the PCIe error counters.
-7. **Run a model across all GPUs:** `scripts\stage0-test.ps1 -Model 7b` (Windows) runs
+7. **Or simply run `astra auto`**: it re-detects every GPU, notices the change, and
+   picks, launches and verifies the best model for the new pool.
+8. **Run a model across all GPUs:** `scripts\stage0-test.ps1 -Model 7b` (Windows) runs
    the full test on however many GPUs ASTRA finds: plan → engine → speed → runtime
    gate. Or do it by hand: `astra plan --gguf <model> --output plan.json`, run the
    printed command, then `astra validate --phase runtime --plan plan.json`. The console

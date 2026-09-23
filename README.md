@@ -26,6 +26,20 @@ the node:
 | Control-plane source (`astra` CLI) | [`src/astra`](src/astra) |
 | Containers, Compose, systemd, Prometheus, Grafana | [`deploy/`](deploy) |
 
+## Quick start: fully automatic
+
+```bash
+pip install -e .        # once (Python 3.11+)
+astra auto              # detect GPUs -> configure -> choose model -> download -> launch -> verify -> console
+```
+
+`astra auto` asks nothing. It finds every NVIDIA GPU (`nvidia-smi`, including the
+GPU-to-GPU topology from `nvidia-smi topo -m`) and any other ASTRA machines on your
+network. It writes the as-built config, picks the largest model that fits, downloads
+llama.cpp (the right CUDA build) and the model, then starts, benchmarks and validates
+it and opens the console at http://127.0.0.1:9838/. Add or remove a GPU and run it
+again. `astra auto --no-launch` only shows what it would do.
+
 ## Web console
 
 `astra ui` opens an exo-style console: every machine and GPU in the pool, where each

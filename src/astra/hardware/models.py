@@ -120,12 +120,15 @@ class Inventory:
     platform: str = ""
     paths: dict[str, GpuPath] = field(default_factory=dict)  # keyed by GPU uuid
     timestamp: float = 0.0
+    # nvidia-smi topo -m: {(gpu index i, gpu index j): "PIX" | "PXB" | "PHB" | ...}, i < j
+    gpu_links: dict[tuple[int, int], str] = field(default_factory=dict)
 
     def gpu(self, uuid: str) -> GpuInfo | None:
         return next((g for g in self.gpus if g.uuid == uuid), None)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
+        data["gpu_links"] = {f"{i}-{j}": v for (i, j), v in self.gpu_links.items()}
         for uuid, path in self.paths.items():
             bottleneck = path.bottleneck
             data["paths"][uuid]["bottleneck"] = asdict(bottleneck) if bottleneck else None

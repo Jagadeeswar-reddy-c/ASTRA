@@ -61,6 +61,7 @@ test, I = inspection, D = demonstration, A = analysis.
 | FR-17 | The planner shall place a model across local and remote GPUs, costing each machine boundary, and generate one llama.cpp launch that drives all of them behind a single OpenAI-compatible endpoint | M | T |
 | FR-18 | The head node shall work without a local GPU (orchestration/API only) | S | T |
 | FR-19 | A web console shall show the pool topology (machines, GPUs, links), live GPU stats, the active plan's layer placement and pipeline order, health findings, and let the user plan a model and chat with the running engine | S | T, D |
+| FR-20 | One command shall detect every NVIDIA GPU (count, model, memory, links, GPU-to-GPU topology via NVIDIA tools) locally and on the network, write the as-built configuration, choose the best model that fits, download what is missing, launch, benchmark and validate, with no operator input | M | T, D |
 | FR-15 | The system shall compute the chassis power budget from the installed GPUs, recommend a PSU size, and fail the link gate when the configured PSU is too small | M | T |
 
 ## 4. Non-functional requirements

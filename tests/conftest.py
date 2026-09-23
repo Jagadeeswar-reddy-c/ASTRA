@@ -15,6 +15,16 @@ from astra.hardware import nvsmi, sysfs
 from astra.hardware.models import GpuInfo, Inventory
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture(autouse=True)
+def _isolated_user_config(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Never read the developer's real per-user astra.toml during tests."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("xdg")))
+
+
 UUID_2060 = "GPU-2060aaaa-0000-4000-8000-000000002060"
 UUID_3050 = "GPU-3050bbbb-0000-4000-8000-000000003050"
 

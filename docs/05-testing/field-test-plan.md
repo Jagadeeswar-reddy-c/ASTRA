@@ -20,8 +20,11 @@ and closes the matching TC IDs.
 
 ## Stage 0 — on your current PC (no purchase)
 
-**One command does all of Stage 0** (downloads llama.cpp and the model if missing,
-plans, starts the engine, measures, runs the runtime gate, writes a report):
+**Fully automatic:** `astra auto` detects the GPUs, chooses the model itself and runs
+the whole Stage 0 (ADR-0013). Use the script below when you want to choose the model.
+
+**Scripted alternative** (downloads llama.cpp and the model if missing, plans, starts
+the engine, measures, runs the runtime gate, writes a report):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\stage0-test.ps1              # 3B model

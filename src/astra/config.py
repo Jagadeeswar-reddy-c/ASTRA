@@ -16,7 +16,23 @@ from typing import Any
 
 from astra.errors import ConfigError
 
-DEFAULT_SEARCH_PATHS = (Path("astra.toml"), Path("/etc/astra/astra.toml"))
+SYSTEM_CONFIG = Path("/etc/astra/astra.toml")
+
+
+def user_config_path() -> Path:
+    """Per-user config written by `astra auto`: $XDG_CONFIG_HOME, %APPDATA%, or ~/.config."""
+    base = os.environ.get("XDG_CONFIG_HOME") or (
+        os.environ.get("APPDATA") if os.name == "nt" else None
+    )
+    root = Path(base) if base else Path.home() / ".config"
+    return root / "astra" / "astra.toml"
+
+
+def search_paths() -> tuple[Path, ...]:
+    """Config lookup order: ./astra.toml, the per-user file, then the system file."""
+    return (Path("astra.toml"), user_config_path(), SYSTEM_CONFIG)
+
+
 PLX_VENDOR_ID = "0x10b5"  # Broadcom / PLX Technology
 
 
@@ -190,7 +206,7 @@ def load_config(path: str | Path | None = None) -> AstraConfig:
     elif os.environ.get("ASTRA_CONFIG"):
         candidates = [Path(os.environ["ASTRA_CONFIG"])]
     else:
-        candidates = [p for p in DEFAULT_SEARCH_PATHS if p.is_file()]
+        candidates = [p for p in search_paths() if p.is_file()]
         if not candidates:
             return AstraConfig()
 

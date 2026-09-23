@@ -5,6 +5,21 @@ versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-24 — CR-005: zero-input automation
+
+### Added
+- `astra auto`: detects every NVIDIA GPU (`nvidia-smi -q -x`, `nvidia-smi topo -m`) and
+  ASTRA agents on the LAN, writes the as-built config (per-user location; `.new` file on
+  hardware changes), checks compatibility/power, recommends the best model that fits,
+  downloads llama.cpp (CUDA 12/13 chosen from the GPUs) and the GGUF, launches,
+  benchmarks, runs the runtime gate and serves the console. Verified on an RTX 3060 Ti:
+  Qwen2.5-7B Q4_K_M, 74.4 tok/s vs 73 estimated, gate 5/5.
+- `hardware/nvtopo.py`: GPU-to-GPU topology (PIX/PXB/PHB/NODE/SYS/NVLink) on any OS;
+  shown by `astra probe`, used by L04 and `--emit-config` on Windows.
+- Verified GGUF download sources for every catalog model × Q4_K_M/Q5_K_M/Q6_K/Q8_0.
+- Per-user config location (`%APPDATA%\astra\astra.toml`, `~/.config/astra/astra.toml`).
+- ADR-0013, CR-005, FR-20, TC-SW-25, TC-RT-10.
+
 ## [0.4.3] — 2026-09-24
 
 ### Added
