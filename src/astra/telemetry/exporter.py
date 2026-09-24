@@ -106,6 +106,19 @@ def render_metrics(
             "astra_chassis_rated_power_watts",
             "Board power of the installed chassis GPUs + overhead",
         ),
+        "module_psu": _Family("astra_module_psu_watts", "PSU rating of an ASTRA Stack brick"),
+        "module_limit": _Family(
+            "astra_module_power_limit_watts", "Brick sustained power ceiling (PSU x max ratio)"
+        ),
+        "module_draw": _Family(
+            "astra_module_power_watts", "Measured draw of a brick's GPUs plus its overhead"
+        ),
+        "module_rated": _Family(
+            "astra_module_rated_power_watts", "Board power of a brick's GPUs plus its overhead"
+        ),
+        "module_missing": _Family(
+            "astra_module_missing_gpus", "Configured GPUs of a brick that are not enumerated"
+        ),
     }
 
     fam["info"].add(
@@ -132,8 +145,17 @@ def render_metrics(
             config.chassis,
             inventory.paths,
             config.interconnect.switch_vendor_ids,
+            config.modules,
         )
         in_chassis = {c.gpu.uuid for c in report.chassis}
+        for m in report.modules:
+            ml = {"node": node, "module": m.name}
+            fam["module_psu"].add(m.power.psu_watts, **ml)
+            fam["module_limit"].add(round(m.power.sustained_limit_watts, 3), **ml)
+            m_draw = sum(c.gpu.power_draw_w or 0.0 for c in m.members)
+            fam["module_draw"].add(m_draw + m.power.overhead_watts, **ml)
+            fam["module_rated"].add(m.power.sustained_watts, **ml)
+            fam["module_missing"].add(len(m.missing), **ml)
         draw = sum(c.gpu.power_draw_w or 0.0 for c in report.chassis)
         fam["chassis_draw"].add(draw + config.chassis.overhead_watts, node=node)
         fam["chassis_rated"].add(report.power.sustained_watts, node=node)
@@ -149,6 +171,7 @@ def render_metrics(
                 architecture=caps[g.uuid].architecture,
                 compute_capability="" if cc is None else f"{cc:.1f}",
                 in_chassis="true" if g.uuid in in_chassis else "false",
+                module=report.module_of(g.uuid) or "",
                 vbios=g.vbios or "",
             )
             fam["mem_total"].add(g.memory_total_bytes, **lbl)

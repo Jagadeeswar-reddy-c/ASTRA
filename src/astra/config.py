@@ -66,6 +66,18 @@ class ChassisConfig:
 
 
 @dataclass(frozen=True)
+class ModuleConfig:
+    """One ASTRA Stack brick (ADR-0014): its GPUs, its own PSU and the expected link."""
+
+    name: str
+    gpus: tuple[str, ...]  # per GPU: UUID, PCI bus id, or a product-name substring
+    psu_watts: int
+    overhead_watts: int = 15  # OCuLink receiver + fan
+    link_gen: int | None = None  # expected PCIe generation to the hub (e.g. 3 or 4)
+    link_width: int | None = None  # expected lanes (4 for OCuLink 4i)
+
+
+@dataclass(frozen=True)
 class ThermalConfig:
     warn_c: float = 80.0
     crit_c: float = 87.0
@@ -119,6 +131,7 @@ class AstraConfig:
     fabric: FabricConfig = field(default_factory=FabricConfig)
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     validation: ValidationConfig = field(default_factory=ValidationConfig)
+    modules: tuple[ModuleConfig, ...] = ()  # [[module]]: ASTRA Stack bricks (ADR-0014)
     source: Path | None = None
 
 
@@ -160,6 +173,18 @@ def parse_config(data: dict[str, Any], source: Path | None = None) -> AstraConfi
     if "exclude_gpus" in planner_raw:
         planner_raw["exclude_gpus"] = tuple(planner_raw["exclude_gpus"])
 
+    modules_raw = data.get("module", [])
+    if not isinstance(modules_raw, list):
+        raise ConfigError("[[module]] must be an array of tables")
+    modules = []
+    for i, m in enumerate(modules_raw):
+        if not isinstance(m, dict) or "name" not in m or "psu_watts" not in m:
+            raise ConfigError(f"module[{i}] needs 'name', 'gpus' and 'psu_watts'")
+        gpus = m.get("gpus")
+        if not isinstance(gpus, list) or not gpus or not all(isinstance(g, str) for g in gpus):
+            raise ConfigError(f"module[{i}].gpus must be a non-empty list of strings")
+        modules.append(_build(ModuleConfig, {**m, "gpus": tuple(gpus)}, f"module[{i}]"))
+
     fabric_raw = dict(_section(data, "fabric"))
     if "peers" in fabric_raw:
         fabric_raw["peers"] = tuple(fabric_raw["peers"])
@@ -173,6 +198,7 @@ def parse_config(data: dict[str, Any], source: Path | None = None) -> AstraConfi
         fabric=_build(FabricConfig, fabric_raw, "fabric"),
         telemetry=_build(TelemetryConfig, _section(data, "telemetry"), "telemetry"),
         validation=_build(ValidationConfig, _section(data, "validation"), "validation"),
+        modules=tuple(modules),
         source=source,
     )
     _check(cfg)
@@ -194,6 +220,11 @@ def _check(cfg: AstraConfig) -> None:
         raise ConfigError("fabric.network_hop_ms must be >= 0")
     if cfg.thermal.warn_c >= cfg.thermal.crit_c:
         raise ConfigError("thermal.warn_c must be lower than thermal.crit_c")
+    names = [m.name for m in cfg.modules]
+    if len(names) != len(set(names)):
+        raise ConfigError("[[module]] names must be unique")
+    if any(m.psu_watts <= 0 for m in cfg.modules):
+        raise ConfigError("module.psu_watts must be > 0")
     if not 0 < cfg.validation.runtime_tolerance < 1:
         raise ConfigError("validation.runtime_tolerance must be within (0, 1)")
 
@@ -214,8 +245,15 @@ def load_config(path: str | Path | None = None) -> AstraConfig:
     if not chosen.is_file():
         raise ConfigError(f"config file not found: {chosen}")
     try:
-        with chosen.open("rb") as fh:
-            data = tomllib.load(fh)
-    except tomllib.TOMLDecodeError as exc:
+        data = tomllib.loads(_decode(chosen.read_bytes()))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
         raise ConfigError(f"{chosen}: {exc}") from exc
     return parse_config(data, source=chosen)
+
+
+def _decode(raw: bytes) -> str:
+    """TOML is UTF-8, but Windows PowerShell 5.1 writes `astra probe --emit-config >
+    astra.toml` as UTF-16 (and Out-File as UTF-8 with a BOM); accept both."""
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    return raw.decode("utf-8-sig")

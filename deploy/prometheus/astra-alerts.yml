@@ -66,6 +66,24 @@ groups:
           summary: "{{ $labels.node }}: GPUs drawing {{ $value }} W on the chassis PSU"
           runbook: "docs/07-operations/runbooks.md#rb-05-power"
 
+      - alert: AstraModulePowerHigh
+        # An ASTRA Stack brick draws more than its own PSU should carry (ADR-0014).
+        expr: astra_module_power_watts > on(node, module) astra_module_power_limit_watts
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.node }} brick {{ $labels.module }}: drawing {{ $value }} W"
+          runbook: "docs/07-operations/runbooks.md#rb-05-power"
+
+      - alert: AstraModuleGpuMissing
+        # A configured brick GPU did not enumerate: unpowered brick, loose cable, BAR space.
+        expr: astra_module_missing_gpus > 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.node }} brick {{ $labels.module }}: {{ $value }} GPU(s) missing"
+          runbook: "docs/07-operations/runbooks.md#rb-08-stack"
+
       - alert: AstraChassisUndersized
         # The installed GPUs' rated power exceeds what the configured PSU should carry.
         expr: astra_chassis_rated_power_watts > on(node) astra_chassis_power_limit_watts

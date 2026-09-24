@@ -27,7 +27,8 @@ def _ctx(inv: Inventory, log: str | None = "", cfg: AstraConfig = CFG, **kw) -> 
 def test_healthy_reference_node_passes(reference_inventory: Inventory) -> None:
     results = _by_id(run_link_checks(_ctx(reference_inventory)))
     assert {k: r.status for k, r in results.items()} == {
-        f"L{i:02d}": Status.PASS for i in range(1, 13)
+        **{f"L{i:02d}": Status.PASS for i in range(1, 13)},
+        "L13": Status.SKIP,  # no [[module]] bricks configured
     }
     assert "Gen3 x4" in results["L05"].detail
     assert "0000:02:00.0" in results["L04"].detail
@@ -141,7 +142,7 @@ def test_crashing_check_is_contained(reference_inventory: Inventory) -> None:
     )  # type: ignore[arg-type]
     results = run_link_checks(_ctx(inv))
     assert any(r.status is Status.FAIL and "crashed" in r.detail for r in results)
-    assert len(results) == 12
+    assert len(results) == 13
 
 
 # --------------------------------------------------------------------------- runtime
@@ -246,8 +247,9 @@ def test_report_renderers(reference_inventory: Inventory) -> None:
     assert rep.status is Status.PASS and rep.exit_code == 0
     assert json.loads(rep.to_json())["counts"]["PASS"] == 12
     suite = ET.fromstring(rep.to_junit())
-    assert suite.get("tests") == "12" and suite.get("failures") == "0"
-    assert rep.to_markdown().count("\n| L") == 12
+    assert suite.get("tests") == "13" and suite.get("failures") == "0"
+    assert suite.get("skipped") == "1"  # L13 without bricks
+    assert rep.to_markdown().count("\n| L") == 13
     assert "Result: PASS" in rep.to_table()
 
 

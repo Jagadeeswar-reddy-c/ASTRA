@@ -348,7 +348,7 @@ function renderTopology() {
         parts.push(`<circle cx="${x + 16}" cy="${y + 21}" r="11" fill="${col}"/><text x="${x + 16}" y="${y + 25}" font-size="11" font-weight="700" text-anchor="middle" fill="#fff" style="fill:#fff">${p.stage + 1}</text>`);
       }
       const tx = x + (p ? 34 : 12);
-      parts.push(`<text x="${tx}" y="${y + 17}" font-size="12.5" font-weight="600">${esc(short(g.name))}${g.usable ? "" : " (not served)"}</text>`);
+      parts.push(`<text x="${tx}" y="${y + 17}" font-size="12.5" font-weight="600">${esc(short(g.name))}${g.usable ? "" : " (not served)"}${g.module ? `<tspan font-size="11" font-weight="500" class="muted"> · ${esc(g.module)}</tspan>` : ""}</text>`);
       const total = g.memory_total_bytes || 1;
       const detail = p ? `layers ${p.first_layer}–${p.first_layer + p.n_layers - 1}` : `${esc(g.architecture || "")}`;
       parts.push(`<text x="${x + w - 10}" y="${y + 17}" font-size="11" text-anchor="end" class="muted">${detail}</text>`);
@@ -420,7 +420,7 @@ function renderGpuTable() {
     const power = g.power_draw_w != null ? `${Math.round(g.power_draw_w)} W` : (g.board_power_w ? `≤${Math.round(g.board_power_w)} W` : "–");
     return `<tr>
       <td>${chip}</td>
-      <td><b>${esc(short(g.name))}</b><div class="meta">${esc(g.architecture || "?")}${g.compute_capability ? " · cc " + g.compute_capability.toFixed(1) : ""}${g.nvenc === false ? " · no NVENC" : ""}</div></td>
+      <td><b>${esc(short(g.name))}</b><div class="meta">${esc(g.architecture || "?")}${g.compute_capability ? " · cc " + g.compute_capability.toFixed(1) : ""}${g.nvenc === false ? " · no NVENC" : ""}${g.module ? " · " + esc(g.module) : ""}</div></td>
       <td>${esc(g.node)} <span class="tag ${g.role === "head" ? "head" : ""}">${g.role}</span></td>
       <td style="min-width:160px"><div class="bar"><span style="width:${used}%;background:var(--used)"></span></div>
         <div class="meta num">${gb(g.memory_used_bytes)} / ${gb(g.memory_total_bytes)}${p ? " · plan " + gb(p.required_bytes) : ""}</div></td>

@@ -5,6 +5,24 @@ versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-24 — ASTRA Stack bricks in software (CR-006 S1-S3, S5)
+
+### Added
+- `[[module]]` config: one ASTRA Stack brick per entry (its GPUs by UUID, bus id or name,
+  its own PSU, expected link). `astra probe --emit-config --stack` writes them.
+- Power budget per brick: `astra compat` lists bricks; L12 checks every brick's PSU;
+  exporter `astra_module_{psu,power_limit,power,rated_power}_watts`,
+  `astra_module_missing_gpus`, `module` label on `astra_gpu_info`; alerts
+  `AstraModulePowerHigh`, `AstraModuleGpuMissing`; runbook RB-08.
+- Link check L13: every brick present, on its expected Gen/width, one switch level
+  (star, ADR-0014).
+- Console: GPUs labelled with their brick on the map and in the GPU table.
+- Deployment guide §12, TC-SW-29, TC-HW-13, FR-21 traced.
+
+### Fixed
+- Config files written by Windows PowerShell 5.1 (`astra probe --emit-config > astra.toml`
+  is UTF-16; `Out-File` adds a BOM) now load.
+
 ## [0.6.0] — 2026-09-24 — Bigger models, faster answers, stack sizing (CR-006)
 
 Measured on the RTX 3060 Ti: docs/05-testing/reports/performance-field-test.md.

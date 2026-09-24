@@ -304,8 +304,8 @@ def _write_or_print(text: str, output: str | None) -> None:
 # ---------------------------------------------------------------------------- commands
 
 
-def _emit_config(inv: Inventory, cfg: AstraConfig) -> str:
-    return asbuilt.render_config(inv, cfg)
+def _emit_config(inv: Inventory, cfg: AstraConfig, stack: bool = False) -> str:
+    return asbuilt.render_config(inv, cfg, stack)
 
 
 def _topology_config(inv: Inventory, cfg: AstraConfig, uuids: list[str]) -> list[str]:
@@ -334,6 +334,21 @@ def _format_compat(report: CompatReport) -> str:
             f"{', '.join(c.engines):<18}{'yes' if c in report.chassis else 'no':<8}"
         )
     pw = report.power
+    if report.modules:
+        out += ["", "  ASTRA Stack modules (each brick has its own PSU):"]
+        for m in report.modules:
+            b = m.power
+            names = ", ".join(f"GPU {c.gpu.index}" for c in m.members) or "no GPU found"
+            missing = f"; MISSING {', '.join(m.missing)}" if m.missing else ""
+            out.append(
+                f"    {m.name:<12} {names:<16} {b.sustained_watts:4.0f} W sustained, "
+                f"{b.peak_watts:4.0f} W peak on PSU {b.psu_watts} W: "
+                f"{'OK' if b.ok else f'TOO SMALL (>= {b.recommended_psu_watts} W)'}{missing}"
+            )
+        if report.findings:
+            out.append("")
+            out += [f"  [{f.severity.upper():<4}] {f.message}" for f in report.findings]
+        return "\n".join(out)
     out += [
         "",
         f"  Chassis power ({report.chassis_basis}): GPUs {pw.gpu_watts:.0f} W + overhead "
@@ -357,7 +372,7 @@ def cmd_compat(args: argparse.Namespace, cfg: AstraConfig) -> int:
     else:
         inv = probe()
         gpus, driver, paths = list(inv.gpus), args.driver or inv.driver_version, inv.paths
-    report = analyse(gpus, driver, chassis, paths, cfg.interconnect.switch_vendor_ids)
+    report = analyse(gpus, driver, chassis, paths, cfg.interconnect.switch_vendor_ids, cfg.modules)
     print(json.dumps(report.to_dict(), indent=2) if args.json else _format_compat(report))
     return 1 if report.worst == "fail" else 0
 
@@ -365,7 +380,7 @@ def cmd_compat(args: argparse.Namespace, cfg: AstraConfig) -> int:
 def cmd_probe(args: argparse.Namespace, cfg: AstraConfig) -> int:
     inv = probe()
     if args.emit_config:
-        print(_emit_config(inv, cfg), end="")
+        print(_emit_config(inv, cfg, args.stack), end="")
     elif args.json:
         print(json.dumps(inv.to_dict(), indent=2))
     else:
@@ -787,6 +802,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--emit-config",
         action="store_true",
         help="print an astra.toml that freezes the installed GPUs as the as-built node",
+    )
+    p.add_argument(
+        "--stack",
+        action="store_true",
+        help="with --emit-config: one [[module]] (ASTRA Stack brick, own PSU) per GPU",
     )
     p.set_defaults(func=cmd_probe)
 

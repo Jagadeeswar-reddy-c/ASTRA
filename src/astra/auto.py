@@ -281,7 +281,12 @@ def sync_config(inv: Inventory, cfg: AstraConfig, echo: Echo) -> Path:
         echo(f"    created {target}")
         return target
     report = analyse(
-        inv.gpus, inv.driver_version, cfg.chassis, inv.paths, cfg.interconnect.switch_vendor_ids
+        inv.gpus,
+        inv.driver_version,
+        cfg.chassis,
+        inv.paths,
+        cfg.interconnect.switch_vendor_ids,
+        cfg.modules,
     )
     detected = sorted(
         (c.spec.model if c.spec else c.gpu.name, (c.gpu.memory_total_bytes or 0) // MIB)
@@ -386,7 +391,12 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
         )
         return 1
     report: CompatReport = analyse(
-        inv.gpus, inv.driver_version, cfg.chassis, inv.paths, cfg.interconnect.switch_vendor_ids
+        inv.gpus,
+        inv.driver_version,
+        cfg.chassis,
+        inv.paths,
+        cfg.interconnect.switch_vendor_ids,
+        cfg.modules,
     )
     echo(f"    {len(inv.gpus)} NVIDIA GPU(s), driver {inv.driver_version}, {inv.platform}")
     for cap in report.caps:

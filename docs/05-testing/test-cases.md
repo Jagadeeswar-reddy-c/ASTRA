@@ -34,6 +34,7 @@ defect link), **B** = blocked.
 | TC-SW-26 | 32B/70B catalog, split GGUF download and reading, catalog match by vocabulary; draft memory (within 10 % of the 645 MiB measured), draft on the first local GPU, never remote or vLLM, estimate unchanged; KV and draft launch flags (current and legacy); Compose KV type | `tests/unit/test_performance.py` | FR-12, FR-23 | P |
 | TC-SW-27 | `astra size`: 70B at 8 tok/s (2 × RTX 5090 first; 3 × RTX 3090; 4 × RTX 5060 Ti at 7.5), owned GPUs, filters, unreachable target, CLI and JSON | `test_performance.py` (sizing) | FR-22 | P |
 | TC-SW-28 | `astra auto` keeps speculative decoding only when it measures ≥ 5 % faster (restarts the baseline otherwise); q8_0 KV only when needed; every part of a split model downloaded | `test_performance.py` (auto) | FR-20, FR-23 | P |
+| TC-SW-29 | Bricks: `[[module]]` parsing and errors, config written by PowerShell (BOM / UTF-16), GPU assignment (ids before names, each GPU once), per-brick PSU budget and L12, L13 (missing, narrow/slow link, daisy chain vs one switch), exporter `astra_module_*`, `--emit-config --stack` round trip, `compat` listing, console labels | `tests/unit/test_stack.py` | FR-21 | P |
 | TC-SW-25 | `astra auto`: recommendation ranking, CUDA build choice, llama.cpp release selection and extraction, config create/match/change, nvidia-smi topo parsing and L04 fallback, dry run | `tests/unit/test_auto.py` | FR-20 | P |
 
 ## B. Hardware acceptance (reference node)
@@ -51,6 +52,7 @@ defect link), **B** = blocked.
 | TC-HW-09 | Sleep disabled | `systemctl status sleep.target suspend.target` | Both masked | NFR-03 (DR-05) | |
 | TC-HW-10 | Cold-boot repeatability | 10 × full power-off (30 s) → boot → `systemctl status astra-selftest` | 10/10 PASS | NFR-10 | |
 | TC-HW-12 | GPU change procedure (CR-001) | Power off → swap/add a card → `astra compat` → `astra probe --emit-config` → review/commit the config → `astra validate` | L11 and L12 PASS; L02 matches the new as-built; re-plan and re-run the runtime gate | FR-13, FR-15 | |
+| TC-HW-13 | Stack of 4 bricks (CR-006, R-15) | Four 1-GPU bricks on the hub; cold boot × 5; `astra probe --emit-config --stack`; `astra validate` | All 4 GPUs enumerate every boot; L12 and L13 PASS | FR-21, NFR-10 | |
 | TC-HW-11 | Earthing and single source | Multimeter: frame ↔ PSU earth pin; check each GPU's 8-pin and backplane feed trace to the chassis PSU; both PSUs on one strip | < 0.1 Ω; no host-PSU lead into the chassis except relay sense | NFR-04 | |
 
 ## C. Runtime acceptance (reference node)

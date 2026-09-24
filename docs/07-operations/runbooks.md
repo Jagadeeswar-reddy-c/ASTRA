@@ -87,6 +87,25 @@ Replays, AER or Xid. *Alerts:* AstraPcieReplays, AstraAerUncorrectable · *Check
 6. Regenerate the as-built config (`astra probe --emit-config`), re-plan
    (`astra plan … --output --env-file`), then run both gates (TC-HW-12).
 
+## RB-08 Stack brick missing or on a slow link
+*Checks:* L12, L13 · *Alerts:* AstraModuleGpuMissing, AstraModulePowerHigh
+
+1. `astra compat` lists every brick with its GPU, power and any `MISSING` selector;
+   `astra validate` shows L13 per brick.
+2. **GPU missing:** is the brick's PSU on (its sync lead from the hub)? Re-seat the
+   OCuLink cable at both ends and the receiver in the brick. Power everything off
+   before touching cables (no PCIe hot-plug, LIM-05).
+3. **Still missing with 3+ bricks:** the board may be out of PCIe address space (R-15).
+   In the BIOS enable *Above 4G Decoding* and *Resizable BAR*; on Linux check
+   `dmesg | grep -i "BAR\|no space"`. If one brick always drops out, the board cannot
+   host that many GPUs: move a brick to another PC and join it over the Fabric (§10).
+4. **L13 "x4 < x8" or a lower Gen:** swap the cable (short, shielded OCuLink), check
+   the hub port and the receiver; at Gen4 use a redriver or step `link_gen` down.
+5. **L13 "switch levels (daisy chain)":** a brick hangs off another brick's switch.
+   Re-cable it to its own hub port (star, ADR-0014).
+6. **L12 / AstraModulePowerHigh:** that brick's PSU is too small for its card: fit
+   the recommended size or cap the card (`nvidia-smi -i <n> -pl <W>`).
+
 ## RB-06 Runtime split mismatch
 *Check:* R02/R03 fail
 

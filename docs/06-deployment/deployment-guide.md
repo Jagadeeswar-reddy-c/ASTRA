@@ -156,6 +156,36 @@ serves the API, and it may have no GPU of its own.
   http://127.0.0.1:9838/. Do not bind the console to a LAN address without an
   authenticating reverse proxy (NFR-13).
 
+## 12. ASTRA Stack: bricks (ADR-0014)
+
+A stack is one head PC with a hub card and one **brick** per GPU (GPU + its own PSU +
+OCuLink receiver), each cabled directly to the hub (star).
+
+1. Size it first: `astra size --model llama-3.3-70b --min-tps 8` (add `--have "RTX 3060 Ti"`
+   to count GPUs you own).
+2. BIOS: enable Above 4G Decoding and Resizable BAR (needed for 3+ GPUs, R-15).
+3. Connect bricks with everything powered off; each brick's PSU starts from the hub's
+   sync signal. All PSUs on one power strip, frames bonded to earth.
+4. Freeze the as-built stack: `astra probe --emit-config --stack > astra.toml`. This
+   writes one `[[module]]` per GPU with its bus id, a PSU size and the link it trained
+   at. Edit `psu_watts` to the PSUs you fitted.
+5. `astra validate`: L12 checks every brick's PSU, L13 that every brick is present, on
+   its expected link, and one switch level deep. `astra compat` lists the bricks.
+6. `astra auto` plans and serves the model across the bricks; the console labels each
+   GPU with its brick; Prometheus gets `astra_module_*` series and two alerts.
+
+![Console: Llama 3.3 70B across a simulated stack of four RTX 5060 Ti bricks](../images/console-stack-4-bricks.png)
+
+```toml
+[[module]]
+name = "brick-1"
+gpus = ["00000000:05:00.0"]   # UUID, PCI bus id, or a name like "RTX 3090"
+psu_watts = 550
+overhead_watts = 15            # receiver + fan
+link_gen = 3
+link_width = 4
+```
+
 ## 9. Rollback
 
 | Change | Rollback |

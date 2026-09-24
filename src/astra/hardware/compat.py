@@ -21,10 +21,10 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
-from astra.config import ChassisConfig
+from astra.config import ChassisConfig, ModuleConfig
 from astra.hardware.gpu_specs import ArchInfo, GpuSpec, arch_info, lookup
 from astra.hardware.models import GpuInfo, GpuPath
 
@@ -119,6 +119,33 @@ class PowerBudget:
 
 
 @dataclass(frozen=True)
+class ModuleReport:
+    """One ASTRA Stack brick: its GPUs and its own PSU budget (ADR-0014)."""
+
+    config: ModuleConfig
+    members: tuple[GpuCaps, ...]
+    missing: tuple[str, ...]
+    power: PowerBudget
+
+    @property
+    def name(self) -> str:
+        return self.config.name
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "gpus": [c.gpu.uuid for c in self.members],
+            "missing": list(self.missing),
+            "psu_watts": self.power.psu_watts,
+            "sustained_watts": self.power.sustained_watts,
+            "peak_watts": self.power.peak_watts,
+            "sustained_limit_watts": self.power.sustained_limit_watts,
+            "ok": self.power.ok,
+            "recommended_psu_watts": self.power.recommended_psu_watts,
+        }
+
+
+@dataclass(frozen=True)
 class CompatReport:
     driver_version: str | None
     caps: tuple[GpuCaps, ...]
@@ -129,6 +156,12 @@ class CompatReport:
     cuda_architectures: str
     required_driver_window: tuple[int, int | None]  # (min branch, max branch or None)
     notes: tuple[str, ...] = field(default_factory=tuple)
+    modules: tuple[ModuleReport, ...] = ()  # set when [[module]] bricks are configured
+
+    def module_of(self, uuid: str) -> str | None:
+        return next(
+            (m.name for m in self.modules if any(c.gpu.uuid == uuid for c in m.members)), None
+        )
 
     @property
     def worst(self) -> str:
@@ -171,6 +204,7 @@ class CompatReport:
                 "unknown_gpus": list(self.power.unknown_gpus),
             },
             "findings": [f.__dict__ for f in self.findings],
+            "modules": [m.to_dict() for m in self.modules],
         }
 
 
@@ -225,9 +259,29 @@ def analyse(
     chassis: ChassisConfig,
     paths: dict[str, GpuPath] | None = None,
     switch_vendor_ids: tuple[str, ...] = ("0x10b5",),
+    modules: Sequence[ModuleConfig] = (),
 ) -> CompatReport:
     caps = tuple(capabilities(g) for g in gpus)
     members, basis = chassis_members(caps, paths, switch_vendor_ids)
+    module_reports: list[ModuleReport] = []
+    if modules:
+        from astra.hardware.modules import assign
+
+        by_uuid = {c.gpu.uuid: c for c in caps}
+        for a in assign(gpus, modules)[0]:
+            brick = replace(
+                chassis,
+                psu_watts=a.module.psu_watts,
+                overhead_watts=a.module.overhead_watts,
+                slots=len(a.module.gpus),
+            )
+            m_caps = tuple(by_uuid[g.uuid] for g in a.gpus)
+            module_reports.append(
+                ModuleReport(a.module, m_caps, a.missing, power_budget(m_caps, brick))
+            )
+        in_modules = {c.gpu.uuid for m in module_reports for c in m.members}
+        members = tuple(c for c in caps if c.gpu.uuid in in_modules)
+        basis = "GPUs in ASTRA Stack modules ([[module]])"
     findings: list[Finding] = []
 
     def add(sev: str, code: str, msg: str) -> None:
@@ -333,7 +387,24 @@ def analyse(
     if caps and not any(c.nvenc for c in caps):
         add("info", "no_nvenc", "no NVENC-capable GPU: the partitioned transcode profile needs one")
 
-    if len(members) > chassis.slots:
+    for m in module_reports:
+        if m.missing:
+            add(
+                "fail",
+                "module_missing_gpu",
+                f"module {m.name}: no installed GPU matches {', '.join(m.missing)} "
+                "(brick unpowered, cable loose, or MMIO/BAR space exhausted: R-15)",
+            )
+        if not m.power.ok:
+            add(
+                "fail",
+                "module_psu_undersized",
+                f"module {m.name}: PSU {m.power.psu_watts} W too small: sustained "
+                f"{m.power.sustained_watts:.0f} W (limit {m.power.sustained_limit_watts:.0f} W), "
+                f"peak {m.power.peak_watts:.0f} W — use ≥ {m.power.recommended_psu_watts} W",
+            )
+
+    if not module_reports and len(members) > chassis.slots:
         add(
             "fail",
             "slots",
@@ -347,7 +418,7 @@ def analyse(
             "power_unknown",
             f"no power figure for {', '.join(power.unknown_gpus)}; 75 W assumed, measure it",
         )
-    if not power.ok:
+    if not power.ok and not module_reports:  # bricks carry their own PSUs
         add(
             "fail",
             "psu_undersized",
@@ -372,4 +443,5 @@ def analyse(
         power=power,
         cuda_architectures=cuda_archs,
         required_driver_window=(lo, hi),
+        modules=tuple(module_reports),
     )

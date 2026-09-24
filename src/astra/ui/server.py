@@ -96,6 +96,7 @@ class UiState:
                 self.config.chassis,
                 None,
                 self.config.interconnect.switch_vendor_ids,
+                self.config.modules,
             )
             result["health"] = {
                 "status": report.worst,

@@ -24,7 +24,7 @@ Requirement → design → implementation → verification. Updated at every gat
 | FR-18 | ADR-0011 | `cli._budgets` (GPU-less head) | TC-SW-22 | Verified |
 | FR-19 | ADR-0012 | `astra/ui/server.py`, `astra/ui/static/index.html`, `astra/pool.py` | TC-SW-23, 24 | Verified (simulated + real GPU) |
 | FR-20 | ADR-0013 | `astra/auto.py`, `hardware/nvtopo.py`, `astra/asbuilt.py` | TC-SW-25; TC-RT-10 | Verified (real PC) |
-| FR-21 | ADR-0014 | (planned: module identity, per-brick power, L13, console grouping) | — | Open |
+| FR-21 | ADR-0014 | `config.ModuleConfig`, `hardware/modules.py`, `compat.ModuleReport`, checks L12/L13, exporter `astra_module_*`, `asbuilt --stack`, console | TC-SW-29; TC-HW-13 | Verified in software (PC with 1 brick config); hardware pending |
 | FR-22 | ADR-0014 | `planner/sizing.py`, `astra size` | TC-SW-27 | Verified |
 | FR-23 | ADR-0015 | `planner/split.py` (draft), `planner/engines.py`, `astra/auto.py` (A/B) | TC-SW-26, TC-SW-28; TC-RT-12 | Verified (real PC) |
 | NFR-01 | HW-SDD §2, §3.4 | L07, L08, L09, R05; alerts `AstraPcieReplays`, `AstraAerUncorrectable` | TC-HW-05; TC-RT-04 | Pending node |

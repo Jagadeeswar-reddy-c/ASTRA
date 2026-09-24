@@ -50,6 +50,8 @@ The rules are in `deploy/prometheus/astra-alerts.yml` and each links to a runboo
 | AstraGpuFaultSlowdown | critical | RB-04 |
 | AstraChassisPowerHigh | warning | RB-05 |
 | AstraChassisUndersized | warning | RB-05, RB-07 |
+| AstraModulePowerHigh | warning | RB-05, RB-08 |
+| AstraModuleGpuMissing | critical | RB-08 |
 
 ## 4. Dashboards
 

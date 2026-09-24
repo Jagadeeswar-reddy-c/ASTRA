@@ -350,6 +350,7 @@ def _compat(ctx: LinkContext) -> CompatReport:
         ctx.config.chassis,
         ctx.inventory.paths,
         ctx.config.interconnect.switch_vendor_ids,
+        ctx.config.modules,
     )
 
 
@@ -381,6 +382,8 @@ def check_compatibility(ctx: LinkContext) -> CheckResult:
 def check_power_budget(ctx: LinkContext) -> CheckResult:
     title = "Chassis PSU budget"
     report = _compat(ctx)
+    if report.modules:
+        return _module_power(report)
     pw = report.power
     detail = (
         f"{len(report.chassis)} chassis GPU(s) [{report.chassis_basis}]: sustained "
@@ -408,6 +411,70 @@ def check_power_budget(ctx: LinkContext) -> CheckResult:
     return _r("L12", title, Status.PASS, detail, "FR-15", "NFR-03")
 
 
+def _module_power(report: CompatReport) -> CheckResult:
+    title = "Module PSU budgets"
+    parts = [
+        f"{m.name}: {m.power.sustained_watts:.0f}/{m.power.sustained_limit_watts:.0f} W "
+        f"(PSU {m.power.psu_watts} W)"
+        for m in report.modules
+    ]
+    bad = [m for m in report.modules if not m.power.ok]
+    if bad:
+        fixes = "; ".join(f"{m.name} needs >= {m.power.recommended_psu_watts} W" for m in bad)
+        return _r("L12", title, Status.FAIL, f"{fixes} ({', '.join(parts)})", "FR-15", "FR-21")
+    unknown = [g for m in report.modules for g in m.power.unknown_gpus]
+    if unknown:
+        return _r(
+            "L12",
+            title,
+            Status.WARN,
+            f"{', '.join(parts)}; no power data for {', '.join(unknown)} (75 W assumed)",
+            "FR-15",
+            "FR-21",
+        )
+    return _r("L12", title, Status.PASS, ", ".join(parts), "FR-15", "FR-21")
+
+
+def check_stack(ctx: LinkContext) -> CheckResult:
+    """L13 (ADR-0014): every brick present, on its expected link, one switch level deep."""
+    title = "ASTRA Stack modules"
+    if not ctx.config.modules:
+        return _r("L13", title, Status.SKIP, "no [[module]] configured", "FR-21")
+    report = _compat(ctx)
+    fails, warns, ok = [], [], []
+    vendors = ctx.config.interconnect.switch_vendor_ids
+    for m in report.modules:
+        cfg = m.config
+        if m.missing:
+            fails.append(f"{m.name}: GPU {', '.join(m.missing)} missing")
+        for c in m.members:
+            g = c.gpu
+            if cfg.link_gen and g.link_gen_max and g.link_gen_max < cfg.link_gen:
+                fails.append(
+                    f"{m.name}: GPU {g.index} trains at Gen{g.link_gen_max} < Gen{cfg.link_gen}"
+                )
+            if cfg.link_width and g.link_width_max and g.link_width_max < cfg.link_width:
+                fails.append(
+                    f"{m.name}: GPU {g.index} has x{g.link_width_max} < x{cfg.link_width} "
+                    "(cable, receiver or hub port)"
+                )
+            path = ctx.inventory.paths.get(g.uuid)
+            # A switch shows up as two bridges on the path: its upstream and downstream port.
+            levels = (len(path.switches(vendors)) + 1) // 2 if path is not None else 0
+            if levels > 1:
+                warns.append(
+                    f"{m.name}: GPU {g.index} sits behind {levels} switch levels (daisy "
+                    "chain); the stack design is a star with one level (ADR-0014)"
+                )
+        if not m.missing:
+            ok.append(f"{m.name} ({len(m.members)} GPU)")
+    if fails:
+        return _r("L13", title, Status.FAIL, "; ".join(fails + warns), "FR-21")
+    if warns:
+        return _r("L13", title, Status.WARN, "; ".join(warns), "FR-21")
+    return _r("L13", title, Status.PASS, "all bricks present: " + ", ".join(ok), "FR-21")
+
+
 LINK_CHECKS: tuple[Callable[[LinkContext], CheckResult], ...] = (
     check_driver,
     check_inventory,
@@ -421,6 +488,7 @@ LINK_CHECKS: tuple[Callable[[LinkContext], CheckResult], ...] = (
     check_thermals,
     check_compatibility,
     check_power_budget,
+    check_stack,
 )
 
 

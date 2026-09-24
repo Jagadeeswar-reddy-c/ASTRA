@@ -103,6 +103,7 @@ class Pool:
     budgets: list[DeviceBudget]
     notes: list[str]
     simulated: bool = False
+    modules: dict[str, str] = field(default_factory=dict)  # GPU uuid -> ASTRA Stack brick
 
     def to_dict(self) -> dict[str, Any]:
         out_nodes = []
@@ -129,6 +130,7 @@ class Pool:
                         "display_active": g.display_active,
                         "rpc_endpoint": b.rpc_endpoint if b else None,
                         "usable": b is not None,
+                        "module": self.modules.get(g.uuid),
                         "pcie": {
                             "gen": g.link_gen_current,
                             "gen_max": g.link_gen_max,
@@ -187,7 +189,13 @@ def collect(
             budgets.append(nb)
             node = sim_nodes.setdefault(name, PoolNode(name, name, "worker", None))
             node.gpus.append((info[b.uuid], nb))
-        return Pool(list(sim_nodes.values()), budgets, sim_notes + remote_notes, simulated=True)
+        return Pool(
+            list(sim_nodes.values()),
+            budgets,
+            sim_notes + remote_notes,
+            simulated=True,
+            modules=_bricks(cfg, local),
+        )
 
     notes: list[str] = []
     try:
@@ -221,4 +229,13 @@ def collect(
             )
             node.gpus = [(g.to_gpu_info(-1), remote_by_uuid.get(g.uuid)) for g in desc.gpus]
             nodes.append(node)
-    return Pool(nodes, budgets, notes)
+    return Pool(nodes, budgets, notes, modules=_bricks(cfg, local_gpus))
+
+
+def _bricks(cfg: AstraConfig, gpus: list[GpuInfo]) -> dict[str, str]:
+    """{uuid: brick name} for the local GPUs listed in [[module]] (ADR-0014)."""
+    if not cfg.modules:
+        return {}
+    from astra.hardware.modules import assign
+
+    return assign(gpus, cfg.modules)[1]

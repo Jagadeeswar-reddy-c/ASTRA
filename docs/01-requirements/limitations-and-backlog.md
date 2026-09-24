@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document ID | ASTRA-REQ-003 |
-| Version | 1.1 (2026-09-24), state after v0.6.0 |
+| Version | 1.2 (2026-09-24), state after v0.7.0 |
 | Owner | Product Manager · Reviewers: Enterprise Architect, Solution Architect, QA Lead |
 | Purpose | One honest list of what ASTRA cannot do yet, why, and the backlog item that fixes it |
 
@@ -40,7 +40,7 @@ design works around it.
 | LIM-22 | **FT-05**: on Windows (WDDM), nvidia-smi overstates used memory by ~1.3 GB | Runtime check R03 and the free-memory planning are pessimistic on Windows | BL-12 NVML per-process memory | P3 |
 | LIM-23 | **Single head node**: the endpoint, console and plan live on one machine | Head down = service down | BL-13 standby head (later) | P3 |
 | LIM-24 | **No request scheduling or auth** on the OpenAI endpoint; binds to 127.0.0.1 | Sharing with a team needs a reverse proxy with auth | BL-14 API key + LAN bind option | P2 |
-| LIM-25 | Power figures are **rated board power**, not measured at the wall; per-chassis only (one PSU) | Cannot budget several PSUs (modules) | BL-15 per-module PSU budget (CR-006) | P2 |
+| LIM-25 | Power figures are **rated board power**, not measured at the wall. Since v0.7.0 budgets are per brick (`[[module]]`) | No wall-meter input | BL-15 | P3 |
 | LIM-26 | Concurrency not planned: KV cache is sized for one context; no `--parallel` slots in the plan | Several users share one context window | BL-10 plan N slots | P2 |
 | LIM-27 | Recommendation uses **free memory right now** on a display GPU (NU-03) | The model choice changes with what else is open | By design; `--model/--quant` pins it | — |
 | LIM-29 | ~~`--kv-type q8_0` was planned but never passed to the engine or Compose~~ **Fixed in v0.6.0** (PF-07) | — | — | done |
@@ -56,7 +56,7 @@ design works around it.
 | BL-09 | Linux field test: Ubuntu 24.04 on real hardware; Compose + systemd + vLLM (TC-RT-01/02/05/06) | LIM-19, LIM-20 | M | a Linux box or dual boot |
 | BL-03 | Build and qualify the chassis (TC-HW-01…12) | LIM-12 | L | mini-PC specs, CR-002, BOM freeze |
 | BL-01 | vMerge layer 1: PyTorch/diffusers interposer (`astra run -- python app.py`, ComfyUI launcher) that splits models across the pool | LIM-10 | L | — |
-| BL-16 | **ASTRA Stack modules** (CR-006 approved, ADR-0014): ~~S6 catalog~~, ~~S4 `astra size`~~ done v0.6.0; open: S1 module identity, S2 per-brick power, S3 stack link check, S5 console grouping | LIM-25 | M (software) + L (hardware) | — |
+| BL-16 | **ASTRA Stack modules** (CR-006 approved, ADR-0014): ~~S6 catalog~~, ~~S4 `astra size`~~ done v0.6.0; ~~S1, S2, S3, S5~~ done v0.7.0; open: brick hardware and TC-HW-13 | LIM-25 | L (hardware) | BL-03 |
 | BL-05 | Fabric self-healing: detect a lost node, re-plan without it, reload | LIM-14 | M | BL-04 |
 | BL-10 | Concurrency: plan KV for N parallel slots; report aggregate throughput | LIM-26 | S | — |
 | BL-08 | Prefill (time-to-first-token) estimate | LIM-18 | S | — |

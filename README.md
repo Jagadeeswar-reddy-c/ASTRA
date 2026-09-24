@@ -23,7 +23,7 @@ the node:
 | **Which GPUs to buy for a model and speed** (`astra size`) | `astra size --model llama-3.3-70b --min-tps 8` |
 | **Supported GPUs** (`astra gpus`) | [`docs/03-solution-design/supported-gpus.md`](docs/03-solution-design/supported-gpus.md) |
 | **Known limitations and backlog** | [`docs/01-requirements/limitations-and-backlog.md`](docs/01-requirements/limitations-and-backlog.md) |
-| **ASTRA Stack: stackable modules like DGX Spark** (proposed, CR-006) | [`docs/02-architecture/studies/astra-stack-modules.md`](docs/02-architecture/studies/astra-stack-modules.md) |
+| **ASTRA Stack: stackable 1-GPU bricks like DGX Spark** (CR-006, ADR-0014; deployment guide §12) | [`docs/02-architecture/studies/astra-stack-modules.md`](docs/02-architecture/studies/astra-stack-modules.md) |
 | Deployment guide, release process | [`docs/06-deployment`](docs/06-deployment) |
 | Monitoring and runbooks | [`docs/07-operations`](docs/07-operations) |
 | Control-plane source (`astra` CLI) | [`src/astra`](src/astra) |
@@ -105,7 +105,7 @@ of this, plus the PSU size, for any list of cards.
 |---|---|---|
 | 0 Governance / 1 Requirements | G0, G1 | Documented; awaiting sponsor sign-off |
 | 2 Architecture / 3 Solution design | G2, G3 | Documented; design review raised 20 findings (15 + 5 from CR-001) |
-| 4 Development | G4 | Control plane v0.6.0 (CR-001 any GPU mix, CR-003 fabric, CR-004 console, CR-005 automation, CR-006 stack sizing); 221 tests, 90 % coverage; CI green |
+| 4 Development | G4 | Control plane v0.6.0 (CR-001 any GPU mix, CR-003 fabric, CR-004 console, CR-005 automation, CR-006 stack sizing + bricks); 242 tests, 90 % coverage; CI green |
 | 5 Testing | G5 | Automated suite green; **Stage-0 field test PASS on real hardware** (speed estimate within 2–7 %, [report](docs/05-testing/reports/stage0-field-test.md)); chassis tests (TC-HW) pending |
 | 6 Deployment / 7 Operations | G6, G7 | Artefacts ready; pending hardware |
 

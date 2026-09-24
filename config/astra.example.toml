@@ -35,6 +35,16 @@ overhead_watts = 25              # switch + OCuLink receiver + fans
 transient_factor = 1.3           # short GPU power excursions above board power
 max_sustained_ratio = 0.7        # keep sustained load at or below 70 % of the PSU rating
 
+# ASTRA Stack bricks (ADR-0014): one [[module]] per brick with its own PSU.
+# Generate with `astra probe --emit-config --stack`. Leave out for a single chassis.
+# [[module]]
+# name = "brick-1"
+# gpus = ["RTX 3090"]          # UUID, PCI bus id, or product-name substring per GPU
+# psu_watts = 550
+# overhead_watts = 15
+# link_gen = 3
+# link_width = 4
+
 [thermal]
 warn_c = 80
 crit_c = 87
