@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from astra.errors import PlanningError
-from astra.planner.gguf import GgufFile, read_gguf
+from astra.planner.gguf import GgufFile, read_gguf_model
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,8 @@ class Architecture:
     # GGUF downloads for llama.cpp: https://huggingface.co/<gguf_repo>/resolve/main/<stem>-<Q>.gguf
     gguf_repo: str | None = None
     gguf_stem: str | None = None
+    # Small model of the same family (same tokenizer) for speculative decoding.
+    draft: str | None = None
 
 
 @dataclass(frozen=True)
@@ -110,6 +112,71 @@ CATALOG: dict[str, Architecture] = {
             152064,
             awq_repo="Qwen/Qwen2.5-14B-Instruct-AWQ",
         ),
+        Architecture(
+            "qwen2.5-32b",
+            "Qwen2.5 32B Instruct",
+            "Qwen/Qwen2.5-32B-Instruct",
+            32.76e9,
+            64,
+            5120,
+            40,
+            8,
+            128,
+            152064,
+            awq_repo="Qwen/Qwen2.5-32B-Instruct-AWQ",
+        ),
+        Architecture(
+            "llama-3.3-70b",
+            "Llama 3.3 70B Instruct",
+            "meta-llama/Llama-3.3-70B-Instruct",
+            70.55e9,
+            80,
+            8192,
+            64,
+            8,
+            128,
+            128256,
+        ),
+        # Small models: for GPUs with little memory, and as speculative-decoding drafts.
+        Architecture(
+            "qwen2.5-0.5b",
+            "Qwen2.5 0.5B Instruct",
+            "Qwen/Qwen2.5-0.5B-Instruct",
+            0.494e9,
+            24,
+            896,
+            14,
+            2,
+            64,
+            151936,
+            tied_embeddings=True,
+        ),
+        Architecture(
+            "qwen2.5-1.5b",
+            "Qwen2.5 1.5B Instruct",
+            "Qwen/Qwen2.5-1.5B-Instruct",
+            1.54e9,
+            28,
+            1536,
+            12,
+            2,
+            128,
+            151936,
+            tied_embeddings=True,
+        ),
+        Architecture(
+            "llama-3.2-1b",
+            "Llama 3.2 1B Instruct",
+            "meta-llama/Llama-3.2-1B-Instruct",
+            1.24e9,
+            16,
+            2048,
+            32,
+            8,
+            64,
+            128256,
+            tied_embeddings=True,
+        ),
     )
 }
 
@@ -119,25 +186,59 @@ _GGUF_SOURCES = {
     "mistral-7b": ("bartowski/Mistral-7B-Instruct-v0.3-GGUF", "Mistral-7B-Instruct-v0.3"),
     "qwen2.5-7b": ("bartowski/Qwen2.5-7B-Instruct-GGUF", "Qwen2.5-7B-Instruct"),
     "qwen2.5-14b": ("bartowski/Qwen2.5-14B-Instruct-GGUF", "Qwen2.5-14B-Instruct"),
+    "qwen2.5-32b": ("bartowski/Qwen2.5-32B-Instruct-GGUF", "Qwen2.5-32B-Instruct"),
+    "llama-3.3-70b": ("bartowski/Llama-3.3-70B-Instruct-GGUF", "Llama-3.3-70B-Instruct"),
+    "qwen2.5-0.5b": ("bartowski/Qwen2.5-0.5B-Instruct-GGUF", "Qwen2.5-0.5B-Instruct"),
+    "qwen2.5-1.5b": ("bartowski/Qwen2.5-1.5B-Instruct-GGUF", "Qwen2.5-1.5B-Instruct"),
+    "llama-3.2-1b": ("bartowski/Llama-3.2-1B-Instruct-GGUF", "Llama-3.2-1B-Instruct"),
+}
+# Draft pairs share a tokenizer (Qwen2.5 0.5B and 7B+ differ only in 128 padding ids,
+# which llama.cpp accepts). Measured in FT-SPEC-01 (docs/05-testing/reports).
+_DRAFTS = {
+    "qwen2.5-7b": "qwen2.5-0.5b",
+    "qwen2.5-14b": "qwen2.5-0.5b",
+    "qwen2.5-32b": "qwen2.5-0.5b",
+    "llama-3.1-8b": "llama-3.2-1b",
+    "llama-3.3-70b": "llama-3.2-1b",
 }
 CATALOG = {
-    k: replace(a, gguf_repo=_GGUF_SOURCES[k][0], gguf_stem=_GGUF_SOURCES[k][1])
-    if k in _GGUF_SOURCES
-    else a
+    k: replace(
+        a,
+        gguf_repo=_GGUF_SOURCES[k][0] if k in _GGUF_SOURCES else None,
+        gguf_stem=_GGUF_SOURCES[k][1] if k in _GGUF_SOURCES else None,
+        draft=_DRAFTS.get(k),
+    )
     for k, a in CATALOG.items()
 }
+DRAFT_QUANT = "q8_0"  # drafts are tiny; a precise draft is accepted more often
 # Quantizations with published GGUF files (the file-name tag for each).
 GGUF_QUANT_TAGS = {"q4_k_m": "Q4_K_M", "q5_k_m": "Q5_K_M", "q6_k": "Q6_K", "q8_0": "Q8_0"}
+# Files above the hub's 50 GB limit are published as <stem>-<Q>/<stem>-<Q>-0000i-of-0000n.gguf.
+_GGUF_SPLITS = {("llama-3.3-70b", q): 2 for q in ("q5_k_m", "q6_k", "q8_0")}
 
 
-def gguf_download(arch_key: str, quant_key: str) -> tuple[str, str] | None:
-    """(file name, URL) of a published GGUF for a catalog model, or None."""
+def gguf_files(arch_key: str, quant_key: str) -> list[tuple[str, str]]:
+    """(file name, URL) of every part of a published GGUF, first part first; [] if none.
+
+    llama.cpp opens a split model from its first part and finds the others next to it.
+    """
     arch = CATALOG.get(arch_key)
     tag = GGUF_QUANT_TAGS.get(quant_key)
     if arch is None or tag is None or not arch.gguf_repo or not arch.gguf_stem:
-        return None
-    name = f"{arch.gguf_stem}-{tag}.gguf"
-    return name, f"https://huggingface.co/{arch.gguf_repo}/resolve/main/{name}"
+        return []
+    base = f"https://huggingface.co/{arch.gguf_repo}/resolve/main"
+    stem = f"{arch.gguf_stem}-{tag}"
+    parts = _GGUF_SPLITS.get((arch_key, quant_key))
+    if not parts:
+        return [(f"{stem}.gguf", f"{base}/{stem}.gguf")]
+    names = [f"{stem}-{i:05d}-of-{parts:05d}.gguf" for i in range(1, parts + 1)]
+    return [(n, f"{base}/{stem}/{n}") for n in names]
+
+
+def gguf_download(arch_key: str, quant_key: str) -> tuple[str, str] | None:
+    """(file name, URL) of the GGUF to load (the first part of a split model), or None."""
+    files = gguf_files(arch_key, quant_key)
+    return files[0] if files else None
 
 
 QUANTS: dict[str, Quant] = {
@@ -168,6 +269,8 @@ class ModelProfile:
     kv_bytes_per_token_layer: float  # K+V for one token in one layer at the chosen KV dtype
     hf_repo: str | None = None
     quant: str | None = None
+    kv_dtype: str = "f16"
+    arch_key: str | None = None  # catalog key, when known
 
     @property
     def weights_bytes(self) -> int:
@@ -208,6 +311,8 @@ def from_catalog(arch_key: str, quant_key: str, kv_dtype: str = "f16") -> ModelP
         kv_bytes_per_token_layer=_kv_per_token_layer(arch.n_kv_heads, arch.head_dim, kv_dtype),
         hf_repo=arch.awq_repo if quant.key == "awq-int4" and arch.awq_repo else arch.hf_repo,
         quant=quant.key,
+        kv_dtype=kv_dtype,
+        arch_key=arch.key,
     )
 
 
@@ -257,8 +362,25 @@ def from_gguf_file(gguf: GgufFile, kv_dtype: str = "f16") -> ModelProfile:
         head_bytes=head,
         kv_bytes_per_token_layer=_kv_per_token_layer(int(n_kv_heads), int(head_dim), kv_dtype),
         quant=None,
+        kv_dtype=kv_dtype,
+        arch_key=catalog_key_for(gguf),
     )
 
 
+def catalog_key_for(gguf: GgufFile) -> str | None:
+    """The catalog model a GGUF file holds: same depth, width and vocabulary, or None.
+
+    The vocabulary separates look-alikes (Mistral 7B and Llama 3.1 8B share a shape).
+    """
+    shape = (gguf.arch_value("block_count"), gguf.arch_value("embedding_length"))
+    tokens = gguf.metadata.get("tokenizer.ggml.tokens")
+    vocab = tokens.get("array_len") if isinstance(tokens, dict) else None
+    if vocab is None:
+        return None
+    matches = [k for k, a in CATALOG.items() if (a.n_layers, a.hidden, a.vocab) == (*shape, vocab)]
+    return matches[0] if len(matches) == 1 else None
+
+
 def from_gguf(path: str | Path, kv_dtype: str = "f16") -> ModelProfile:
-    return from_gguf_file(read_gguf(path), kv_dtype)
+    """Profile of a GGUF file; for a split model pass its first part."""
+    return from_gguf_file(read_gguf_model(path), kv_dtype)

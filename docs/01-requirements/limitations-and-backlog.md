@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document ID | ASTRA-REQ-003 |
-| Version | 1.0 (2026-09-24), state after v0.5.1 |
+| Version | 1.1 (2026-09-24), state after v0.6.0 |
 | Owner | Product Manager · Reviewers: Enterprise Architect, Solution Architect, QA Lead |
 | Purpose | One honest list of what ASTRA cannot do yet, why, and the backlog item that fixes it |
 
@@ -26,14 +26,14 @@ design works around it.
 | ID | Limitation | Impact | Backlog | Prio |
 |---|---|---|---|---|
 | LIM-10 | vMerge layer 1 (PyTorch/ComfyUI interposer) not built | Only LLM serving uses the pool, not image, video or audio models | BL-01 | **P1** |
-| LIM-11 | The model catalog tops out at **14B** | Cannot plan or auto-download 32B/70B models, the ones a pool (or a DGX Spark) exists for; other models need `--gguf <file>` | BL-02 | **P1** |
+| LIM-11 | ~~The model catalog tops out at 14B~~ **Closed in v0.6.0**: Qwen2.5-32B and Llama-3.3-70B (incl. split files) plus 0.5B–1.5B models | — | BL-02 | done |
 | LIM-12 | The chassis (OCuLink + PEX8747 + second PSU) was **never built or tested**. TC-HW-01…12 are open | G5 cannot pass; the power sync, earthing and link-stability design is unproven | BL-03 (hardware) | **P1** |
 | LIM-13 | Fabric was tested only over **loopback** on one PC; TC-RT-08/09 (two machines) are open | Real LAN latency and a node dropping out are unmeasured | BL-04 | **P1** |
 | LIM-14 | Fabric has **no fault tolerance**: if one node or rpc-server dies, the request fails and the whole model must be reloaded | One flaky machine takes the pool down | BL-05 re-plan on node loss | P2 |
 | LIM-15 | Fabric traffic (llama.cpp RPC) is **unauthenticated and unencrypted**, TCP only | Trusted LAN only (NFR-12); never on Wi-Fi guest nets or the internet | BL-06 mutual-TLS tunnel or WireGuard recipe | P2 |
 | LIM-16 | Remote→remote stage boundaries **relay through the head** (2 hops) | Each extra machine costs ~2–4 ms per token | Upstream llama.cpp; planner already minimises it | P3 |
 | LIM-17 | Remote model loading sends the weights over the network unless `--cache` is warm | 14B Q4 (8.5 GiB) over 1 GbE ≈ 75 s first load | BL-07 pre-seed the rpc cache from the GGUF | P3 |
-| LIM-18 | The speed model covers **decode only**; prompt processing (prefill, compute-bound) is not estimated | Long prompts / RAG feel slower than the tok/s number suggests | BL-08 prefill model from FP16 TFLOPS | P2 |
+| LIM-18 | The speed model covers **decode only**; prefill is not estimated before launch. Since v0.6.0 `astra auto` **measures** it (time to first token for a 2k prompt) | Plans for pools not yet built show no time-to-first-token | BL-08 prefill model from FP16 TFLOPS | P3 |
 | LIM-19 | **vLLM path not field-tested** (TC-RT-02); only llama.cpp is proven on hardware | vLLM pinned version unknown; AWQ splits unverified | BL-09 | P2 |
 | LIM-20 | **Linux production path not run on real hardware**: Compose stack, systemd units, sysfs/AER checks, `setup-host.sh` (only a Docker dry run) | The target OS (Ubuntu 24.04, ADR-0006) is the least field-tested | BL-09 | **P1** |
 | LIM-21 | On Linux, `astra auto` cannot download llama.cpp (no official CUDA Linux build); users compile it | Extra 10–20 minutes and a CUDA toolkit for new Linux users | BL-11 ship a CUDA container / build script | P2 |
@@ -43,18 +43,20 @@ design works around it.
 | LIM-25 | Power figures are **rated board power**, not measured at the wall; per-chassis only (one PSU) | Cannot budget several PSUs (modules) | BL-15 per-module PSU budget (CR-006) | P2 |
 | LIM-26 | Concurrency not planned: KV cache is sized for one context; no `--parallel` slots in the plan | Several users share one context window | BL-10 plan N slots | P2 |
 | LIM-27 | Recommendation uses **free memory right now** on a display GPU (NU-03) | The model choice changes with what else is open | By design; `--model/--quant` pins it | — |
+| LIM-29 | ~~`--kv-type q8_0` was planned but never passed to the engine or Compose~~ **Fixed in v0.6.0** (PF-07) | — | — | done |
+| LIM-30 | Speculative decoding helps only slow pools (+21–38 %) and costs speed on fast ones (−15 %); the Compose stack does not run a draft | Single fast GPUs gain nothing from it | ADR-0015 (measured A/B) | — |
 | LIM-28 | Governance: G0/G1 sign-offs, CR-002 (bifurcation path) and the mini-PC specs are pending | Hardware BOM cannot freeze | Sponsor decision | **P1** |
 
 ## 3. Backlog (ordered)
 
 | ID | Item | Closes | Size | Depends on |
 |---|---|---|---|---|
-| BL-02 | Add 32B / 70B models (Qwen2.5-32B, Llama-3.3-70B, …) with verified GGUF sources, incl. multi-part GGUF downloads | LIM-11 | S | — |
+| ~~BL-02~~ | ~~Add 32B / 70B models with verified GGUF sources, incl. multi-part downloads~~ **Done v0.6.0** | LIM-11 | S | — |
 | BL-04 | Stage-1 field test: two PCs over the LAN (TC-RT-08/09) | LIM-13 | S | a second PC with a GPU |
 | BL-09 | Linux field test: Ubuntu 24.04 on real hardware; Compose + systemd + vLLM (TC-RT-01/02/05/06) | LIM-19, LIM-20 | M | a Linux box or dual boot |
 | BL-03 | Build and qualify the chassis (TC-HW-01…12) | LIM-12 | L | mini-PC specs, CR-002, BOM freeze |
 | BL-01 | vMerge layer 1: PyTorch/diffusers interposer (`astra run -- python app.py`, ComfyUI launcher) that splits models across the pool | LIM-10 | L | — |
-| BL-16 | **ASTRA Stack modules** (CR-006, [study](../02-architecture/studies/astra-stack-modules.md)): module identity, per-module power, cascade link checks, console grouping | LIM-25 | M (software) + L (hardware) | CR-006 decision |
+| BL-16 | **ASTRA Stack modules** (CR-006 approved, ADR-0014): ~~S6 catalog~~, ~~S4 `astra size`~~ done v0.6.0; open: S1 module identity, S2 per-brick power, S3 stack link check, S5 console grouping | LIM-25 | M (software) + L (hardware) | — |
 | BL-05 | Fabric self-healing: detect a lost node, re-plan without it, reload | LIM-14 | M | BL-04 |
 | BL-10 | Concurrency: plan KV for N parallel slots; report aggregate throughput | LIM-26 | S | — |
 | BL-08 | Prefill (time-to-first-token) estimate | LIM-18 | S | — |

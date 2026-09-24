@@ -53,8 +53,10 @@ adds up while speed stays at the (weighted) speed of one card.
 | 3 × RTX 3090 24 GB bricks | 72 GB | 936 GB/s | ~16 tok/s | 1050 W |
 
 (4 × 12 GB and 2 × 24 GB are just too small once KV cache and the per-GPU CUDA reserve
-are counted. The planner will confirm these numbers once the 70B models are added,
-BL-02.)
+are counted.) Since v0.6.0 the planner computes these rows: `astra size --model
+llama-3.3-70b` lists 2 × RTX 5090 (~31 tok/s), 3 × RTX 3090 (~16), 4 × RTX 5060 Ti 16 GB
+(~7.8) and more. Speculative decoding with Llama-3.2-1B adds a measured +21–38 % on
+pools this slow ([FT-SPEC-01](../../05-testing/reports/performance-field-test.md)).
 
 **Example B: the same bricks over PCIe vs over the network** (planner output, today)
 

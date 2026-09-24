@@ -130,6 +130,8 @@ LangChain, …) work the same way.
 | Longer conversations | `astra auto --context 16384` |
 | Keep downloads somewhere else | `astra auto --lab-dir D:\astra-lab` |
 | Verify and exit (no console) | `astra auto --no-ui` |
+| Try speculative decoding even on a fast GPU (kept only if faster) | `astra auto --draft on` |
+| Plan what to buy for a bigger model | `astra size --model llama-3.3-70b --min-tps 8 --have "RTX 3060 Ti"` |
 | Just see your GPUs | `astra probe` · `astra gpus` · `astra compat` |
 
 ## 7. Run it permanently

@@ -8,6 +8,7 @@ Format reference: https://github.com/ggml-org/ggml/blob/master/docs/gguf.md
 
 from __future__ import annotations
 
+import re
 import struct
 from dataclasses import dataclass
 from pathlib import Path
@@ -166,3 +167,39 @@ def read_gguf(path: str | Path, keep_arrays: bool = False) -> GgufFile:
             tensors.append(TensorInfo(name, shape, ggml_type, tensor_nbytes(shape, ggml_type)))
 
     return GgufFile(p, version, metadata, tuple(tensors), p.stat().st_size)
+
+
+_SPLIT = re.compile(r"^(?P<prefix>.+)-(?P<no>\d{5})-of-(?P<count>\d{5})\.gguf$")
+
+
+def split_paths(path: str | Path) -> list[Path]:
+    """All parts of a split GGUF (``<name>-00001-of-00003.gguf``), or just ``path``."""
+    p = Path(path)
+    m = _SPLIT.match(p.name)
+    if not m:
+        return [p]
+    count = int(m.group("count"))
+    return [
+        p.with_name(f"{m.group('prefix')}-{i:05d}-of-{count:05d}.gguf") for i in range(1, count + 1)
+    ]
+
+
+def read_gguf_model(path: str | Path) -> GgufFile:
+    """Read a model that may be split into several files; tensors of all parts are merged.
+
+    llama.cpp loads a split model from its first part and finds the others by name, so
+    the planner does the same. The metadata comes from the first part.
+    """
+    parts = split_paths(path)
+    first = read_gguf(parts[0])
+    if len(parts) == 1:
+        return first
+    missing = [q.name for q in parts if not q.is_file()]
+    if missing:
+        raise ParseError(f"split model is incomplete; missing {', '.join(missing)}")
+    tensors, size = list(first.tensors), first.file_size
+    for q in parts[1:]:
+        part = read_gguf(q)
+        tensors += part.tensors
+        size += part.file_size
+    return GgufFile(first.path, first.version, first.metadata, tuple(tensors), size)

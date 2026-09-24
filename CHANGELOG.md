@@ -5,6 +5,28 @@ versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-09-24 — Bigger models, faster answers, stack sizing (CR-006)
+
+Measured on the RTX 3060 Ti: docs/05-testing/reports/performance-field-test.md.
+
+### Added
+- Catalog: Qwen2.5-32B, Llama-3.3-70B (split GGUF parts downloaded and read together),
+  Qwen2.5-0.5B/1.5B and Llama-3.2-1B; each large model names its draft model.
+- Speculative decoding (ADR-0015): `astra plan --draft auto|<model>|--draft-gguf`; the draft
+  sits on the first local GPU and its memory is planned (within 3 % of measured).
+  `astra auto --draft auto|on|off` benchmarks with and without the draft and keeps it only
+  if it is >= 5 % faster (+21-38 % measured on slow pools, -15 % on a fast single GPU).
+- `astra size --model M --min-tps N [--have ...]`: which GPUs / ASTRA Stack bricks reach a
+  speed target (FR-22, CR-006 S4).
+- `astra auto` reports prefill speed and time to first token; picks a q8_0 KV cache only
+  when the f16 cache does not fit.
+- ADR-0014 (ASTRA Stack bricks, CR-006 approved), ADR-0015, FR-21-23, TC-SW-26-28, TC-RT-12.
+
+### Fixed
+- `--kv-type q8_0/q4_0` was planned but never passed to llama-server or the Compose stack
+  (now `--cache-type-k/v` with `--flash-attn on`; `ASTRA_KV_TYPE`).
+- A fabric CLI test failed on machines with a real GPU (stubbed the wrong probe).
+
 ### Added
 - docs/01-requirements/limitations-and-backlog.md: known limitations (hard limits and
   fixable ones) and the ordered backlog BL-01…BL-19.

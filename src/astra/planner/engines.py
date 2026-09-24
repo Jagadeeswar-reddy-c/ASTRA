@@ -13,6 +13,17 @@ from dataclasses import dataclass, field
 from astra.errors import PlanningError
 from astra.planner.split import Plan
 
+# Speculative decoding settings measured best in FT-SPEC-01: draft at most 4 tokens and
+# stop drafting when the draft is unsure (acceptance rose from ~0.45 to ~0.87).
+SPEC_DRAFT_MAX = 4
+SPEC_DRAFT_P_MIN = 0.75
+
+
+def spec_flag_style(help_text: str) -> str:
+    """'current' for llama.cpp builds with --spec-type (speculation must be switched on
+    explicitly), 'legacy' for older builds (--draft-max; speculation implied by -md)."""
+    return "current" if "--spec-type" in help_text else "legacy"
+
 
 @dataclass(frozen=True)
 class LaunchSpec:
@@ -65,6 +76,8 @@ def llamacpp(
     host: str = "127.0.0.1",
     port: int = 8080,
     binary: str = "llama-server",
+    draft_path: str | None = None,
+    spec_style: str = "current",
 ) -> LaunchSpec:
     if plan.engine != "llamacpp":
         raise PlanningError("plan was made for a different engine")
@@ -88,7 +101,28 @@ def llamacpp(
         str(port),
     ]
     notes = []
+    kv = plan.model.kv_dtype
+    if kv != "f16":
+        # A quantized V cache needs flash attention.
+        argv += ["--flash-attn", "on", "--cache-type-k", kv, "--cache-type-v", kv]
     endpoints, devices = llamacpp_devices(plan)
+    if plan.draft is not None and plan.draft_stage is not None:
+        argv += [
+            "-md",
+            draft_path or "<path/to/draft.gguf>",
+            "-ngld",
+            "99",
+            "-devd",
+            devices[plan.draft_stage],
+        ]
+        if spec_style == "current":
+            argv += ["--spec-type", "draft-simple", "--spec-draft-n-max", str(SPEC_DRAFT_MAX)]
+            argv += ["--spec-draft-p-min", f"{SPEC_DRAFT_P_MIN:g}"]
+        else:
+            argv += ["--draft-max", str(SPEC_DRAFT_MAX), "--draft-p-min", f"{SPEC_DRAFT_P_MIN:g}"]
+        if kv != "f16":
+            argv += ["-ctkd", kv, "-ctvd", kv]
+        notes.append(f"speculative decoding with draft {plan.draft.name}")
     if endpoints:
         # --device fixes the pipeline order across local and remote GPUs; --tensor-split
         # follows the same order.

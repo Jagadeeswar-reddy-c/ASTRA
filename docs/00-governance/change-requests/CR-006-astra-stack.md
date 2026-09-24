@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Raised | 2026-09-24 by the Sponsor ("like DGX Spark, maybe we can make modules to stack them into a single GPU") |
-| Status | **Proposed**: awaiting the Sponsor's decisions D1–D5 |
+| Status | **Approved** 2026-09-24 (Sponsor: "yes, continue with the plan"; D1–D5 as recommended, ADR-0014). Delivered in v0.6.0: S6 (32B/70B models), S4 (`astra size`); next: S1–S3, S5 |
 | Study | [ASTRA-ARC-004](../../02-architecture/studies/astra-stack-modules.md) |
 | Affects | PRD (new FR-21 module awareness, FR-22 sizing), hardware design (brick + hub), config `[[module]]`, checks L12/L13, exporter, console, planner catalog |
 

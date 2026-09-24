@@ -41,6 +41,10 @@ MAX_AUTO_GPUS = 8
 SPEED_TIE = 0.05  # GPU sets whose speed estimates differ by less are treated as equal
 SPEED_SLACK = 0.03  # decode-time slack traded for a more even memory split
 SPEED_FILL_LIMIT = 0.92  # speed plans keep every GPU at or below this utilisation
+# Speculative decoding (FT-SPEC-01, RTX 3060 Ti, Qwen2.5-7B + 0.5B draft): +21-38 % when
+# the target decodes at ~20 tok/s, -5 to -15 % at ~74 tok/s. Only suggested below this.
+SPEC_MAX_TPS = 30.0
+DRAFT_OVERHEAD_BYTES = 64 * MIB  # draft compute buffers on top of its weights and KV
 
 
 @dataclass(frozen=True)
@@ -82,7 +86,8 @@ class Placement:
     n_layers: int
     weight_bytes: int
     kv_bytes: int
-    fixed_bytes: int  # embeddings / output head pinned to this stage
+    fixed_bytes: int  # embeddings / output head (and a draft model) pinned to this stage
+    draft_bytes: int = 0  # part of fixed_bytes: a speculative-decoding draft on this GPU
 
     @property
     def required_bytes(self) -> int:
@@ -129,6 +134,8 @@ class Plan:
     objective: str = "balanced"
     alternatives: tuple[Candidate, ...] = field(default_factory=tuple)
     network_hop_s: float = NETWORK_HOP_S
+    draft: ModelProfile | None = None  # speculative-decoding draft model
+    draft_stage: int | None = None  # index into placements of the GPU holding the draft
 
     @property
     def fits(self) -> bool:
@@ -190,6 +197,7 @@ class Plan:
                     "weight_bytes": p.weight_bytes,
                     "kv_bytes": p.kv_bytes,
                     "fixed_bytes": p.fixed_bytes,
+                    "draft_bytes": p.draft_bytes,
                     "required_bytes": p.required_bytes,
                     "headroom_bytes": p.headroom_bytes,
                     "bandwidth_gbps": p.device.bandwidth_gbps,
@@ -200,6 +208,17 @@ class Plan:
                 for p in self.placements
             ],
             "alternatives": [a.to_dict() for a in self.alternatives],
+            "draft": None
+            if self.draft is None or self.draft_stage is None
+            else {
+                "name": self.draft.name,
+                "source": self.draft.source,
+                "arch_key": self.draft.arch_key,
+                "quant": self.draft.quant,
+                "bytes": draft_bytes(self.draft, self.context),
+                "stage": self.draft_stage,
+                "uuid": self.placements[self.draft_stage].device.uuid,
+            },
         }
 
 
@@ -214,7 +233,8 @@ def estimate_decode_tps(
         bw = p.device.bandwidth_gbps
         if not bw:
             return None
-        seconds += (p.weight_bytes + p.fixed_bytes + p.kv_bytes / 2) / (
+        # The draft is read by its own (cheap) passes, not per target token.
+        seconds += (p.weight_bytes + p.fixed_bytes - p.draft_bytes + p.kv_bytes / 2) / (
             bw * 1e9 * BANDWIDTH_EFFICIENCY
         )
     for a, b in pairwise(placements):
@@ -274,11 +294,37 @@ def budgets_from_gpus(
     return budgets, warnings
 
 
-def _fixed_costs(model: ModelProfile, engine: str, n_devices: int) -> list[int]:
-    fixed = [0] * n_devices
+def draft_bytes(draft: ModelProfile, context: int) -> int:
+    """GPU memory of a speculative-decoding draft: blocks and output head (llama.cpp keeps
+    token embeddings in host RAM), its own KV cache, and buffers. Measured: Qwen2.5-0.5B
+    Q8_0 at 8k context adds 645 MiB (FT-SPEC-01); this formula gives ~650 MiB."""
+    return (
+        sum(draft.layer_bytes)
+        + draft.head_bytes
+        + draft.kv_bytes(draft.n_layers, context)
+        + DRAFT_OVERHEAD_BYTES
+    )
+
+
+def draft_stage(budgets: Sequence[DeviceBudget]) -> int | None:
+    """The draft runs on the first local GPU of the pipeline (never over the network)."""
+    return next((i for i, b in enumerate(budgets) if not b.is_remote), None)
+
+
+def _fixed_costs(
+    model: ModelProfile,
+    engine: str,
+    budgets: Sequence[DeviceBudget],
+    draft: ModelProfile | None = None,
+    context: int = 0,
+) -> list[int]:
+    fixed = [0] * len(budgets)
     fixed[-1] += model.head_bytes
     if engine == "vllm":
         fixed[0] += model.embed_bytes  # llama.cpp keeps token embeddings in host RAM
+    stage = draft_stage(budgets) if draft is not None and engine == "llamacpp" else None
+    if draft is not None and stage is not None:
+        fixed[stage] += draft_bytes(draft, context)
     return fixed
 
 
@@ -384,7 +430,9 @@ def _placements(
     fixed: list[int],
     counts: list[int],
     context: int,
+    draft: ModelProfile | None = None,
 ) -> tuple[Placement, ...]:
+    stage = draft_stage(budgets) if draft is not None else None
     out, start = [], 0
     for dev, count in enumerate(counts):
         out.append(
@@ -395,6 +443,7 @@ def _placements(
                 weight_bytes=sum(model.layer_bytes[start : start + count]),
                 kv_bytes=model.kv_bytes(count, context),
                 fixed_bytes=fixed[dev],
+                draft_bytes=draft_bytes(draft, context) if draft and dev == stage else 0,
             )
         )
         start += count
@@ -411,8 +460,10 @@ def plan(
     objective: str = "balanced",
     hint_single_gpu: bool = True,
     network_hop_s: float = NETWORK_HOP_S,
+    draft: ModelProfile | None = None,
 ) -> Plan:
-    """Plan on exactly these GPUs, in this order."""
+    """Plan on exactly these GPUs, in this order. ``draft`` adds a speculative-decoding
+    draft model on the first local GPU (llama.cpp only)."""
     if engine not in ENGINES:
         raise PlanningError(f"unknown engine '{engine}' (choose from {', '.join(ENGINES)})")
     if objective not in OBJECTIVES:
@@ -442,9 +493,13 @@ def plan(
             )
 
     notes = list(warnings or [])
-    fixed = _fixed_costs(model, engine, len(budgets))
+    if draft is not None and (engine != "llamacpp" or draft_stage(budgets) is None):
+        why = "llama.cpp only" if engine != "llamacpp" else "no local GPU in the pipeline"
+        notes.append(f"speculative decoding skipped: {why}")
+        draft = None
+    fixed = _fixed_costs(model, engine, budgets, draft, context)
     _, counts = _partition(model, budgets, fixed, context, objective)
-    placements = _placements(model, budgets, fixed, counts, context)
+    placements = _placements(model, budgets, fixed, counts, context, draft)
     max_ctx = _max_context(model, budgets, fixed)
     fits = all(p.headroom_bytes >= 0 for p in placements)
 
@@ -457,7 +512,7 @@ def plan(
             notes.append("model weights alone exceed the pool; choose a smaller quantization")
     if hint_single_gpu and len(budgets) > 1 and fits:
         for b in budgets:
-            if _partition(model, [b], _fixed_costs(model, engine, 1), context)[0] <= 1.0:
+            if _partition(model, [b], _fixed_costs(model, engine, [b]), context)[0] <= 1.0:
                 notes.append(
                     f"fits on GPU {b.index} {b.name} alone; a single-GPU deployment avoids "
                     "inter-GPU activation transfers over the shared uplink"
@@ -470,6 +525,12 @@ def plan(
             notes.append(f"GPU {b.index} {b.name}: memory bandwidth unknown — no speed estimate")
     if engine == "vllm" and any((b.compute_capability or 0) < 8.0 for b in budgets):
         notes.append("pre-Ampere GPU in the pool: use --dtype float16 (no bfloat16 support)")
+    tps = estimate_decode_tps(placements, network_hop_s)
+    if draft is None and engine == "llamacpp" and fits and tps and tps <= SPEC_MAX_TPS:
+        notes.append(
+            f"~{tps:.0f} tok/s is slow enough for speculative decoding to help "
+            "(+20-40 % measured): add --draft auto"
+        )
     return Plan(
         model,
         engine,
@@ -480,6 +541,8 @@ def plan(
         tuple(notes),
         objective=objective,
         network_hop_s=network_hop_s,
+        draft=draft,
+        draft_stage=draft_stage(budgets) if draft is not None else None,
     )
 
 
@@ -497,6 +560,7 @@ def select_gpus(
     objective: str = "speed",
     exclude: Sequence[str] = (),
     network_hop_s: float = NETWORK_HOP_S,
+    draft: ModelProfile | None = None,
 ) -> Plan:
     """Try every subset of eligible GPUs (kept in PCI order) and plan on the best one.
 
@@ -535,10 +599,10 @@ def select_gpus(
     for size in range(1, min(len(eligible), model.n_layers) + 1):
         for subset in combinations(eligible, size):
             chosen = list(subset)
-            fixed = _fixed_costs(model, engine, size)
+            fixed = _fixed_costs(model, engine, chosen, draft, context)
             worst, counts = _partition(model, chosen, fixed, context, objective)
             tps = estimate_decode_tps(
-                _placements(model, chosen, fixed, counts, context), network_hop_s
+                _placements(model, chosen, fixed, counts, context, draft), network_hop_s
             )
             fits = worst <= 1.0
             comfortable = worst <= SPEED_FILL_LIMIT
@@ -587,6 +651,7 @@ def select_gpus(
         objective,
         hint_single_gpu=False,
         network_hop_s=network_hop_s,
+        draft=draft,
     )
     return Plan(
         result.model,
@@ -599,4 +664,6 @@ def select_gpus(
         result.objective,
         tuple(c for _, _, c in scored[:6]),
         network_hop_s,
+        result.draft,
+        result.draft_stage,
     )

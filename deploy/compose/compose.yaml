@@ -29,7 +29,7 @@ services:
   # ------------------------------------------------------------------ control plane
   exporter:
     <<: *gpu-service
-    image: ${ASTRA_IMAGE:-astra-control:0.5.1}
+    image: ${ASTRA_IMAGE:-astra-control:0.6.0}
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
@@ -83,6 +83,10 @@ services:
       - --tensor-split=${ASTRA_LAYER_SPLIT}
       - --main-gpu=0
       - --ctx-size=${ASTRA_CONTEXT}
+      # KV cache type from the plan (a quantized cache needs flash attention).
+      - --cache-type-k=${ASTRA_KV_TYPE:-f16}
+      - --cache-type-v=${ASTRA_KV_TYPE:-f16}
+      - --flash-attn=${ASTRA_FLASH_ATTN:-auto}
       - --host=0.0.0.0
       - --port=8080
       - --metrics

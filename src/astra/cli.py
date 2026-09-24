@@ -17,6 +17,7 @@
     astra exporter              Prometheus metrics endpoint
     astra gpus                  supported NVIDIA GPUs and support tiers
     astra models                built-in model catalog and quantizations
+    astra size --model M        which GPUs (ASTRA Stack bricks) to buy for a model and speed
 
 Exit codes: 0 success, 1 validation failed / plan does not fit, 2 usage or runtime error.
 """
@@ -45,7 +46,14 @@ from astra.hardware.models import GpuInfo, Inventory
 from astra.hardware.probe import probe
 from astra.hardware.runner import SubprocessRunner
 from astra.planner import engines
-from astra.planner.models import CATALOG, QUANTS, ModelProfile, from_catalog, from_gguf
+from astra.planner.models import (
+    CATALOG,
+    DRAFT_QUANT,
+    QUANTS,
+    ModelProfile,
+    from_catalog,
+    from_gguf,
+)
 from astra.planner.split import DeviceBudget, Plan, plan, select_gpus
 from astra.units import fmt_bytes
 from astra.validation.checks import LinkContext, run_link_checks, run_runtime_checks
@@ -72,6 +80,8 @@ def _select(budgets: list[DeviceBudget], selector: str) -> list[DeviceBudget]:
 
 
 def _profile(args: argparse.Namespace) -> ModelProfile:
+    if args.kv_type != "f16" and args.engine != "llamacpp":
+        raise AstraError("--kv-type q8_0/q4_0 is a llama.cpp option")
     if args.gguf:
         return from_gguf(args.gguf, args.kv_type)
     if not args.model:
@@ -80,6 +90,23 @@ def _profile(args: argparse.Namespace) -> ModelProfile:
     if quant in QUANTS and args.engine not in QUANTS[quant].engines:
         raise AstraError(f"quantization '{quant}' is not supported by {args.engine}")
     return from_catalog(args.model, quant, args.kv_type)
+
+
+def _draft(args: argparse.Namespace, model: ModelProfile) -> ModelProfile | None:
+    """The speculative-decoding draft: --draft-gguf file, a catalog key, or 'auto'."""
+    if getattr(args, "draft_gguf", None):
+        return from_gguf(args.draft_gguf, model.kv_dtype)
+    choice = getattr(args, "draft", None) or "none"
+    if choice == "none":
+        return None
+    if choice == "auto":
+        arch = CATALOG.get(model.arch_key or "")
+        if arch is None or arch.draft is None:
+            raise AstraError(
+                f"no known draft model for {model.name}; pass --draft <catalog key> or --draft-gguf"
+            )
+        choice = arch.draft
+    return from_catalog(choice, DRAFT_QUANT, model.kv_dtype)
 
 
 def _peers(args: argparse.Namespace, cfg: AstraConfig) -> list[Peer]:
@@ -108,6 +135,7 @@ def _make_plan(args: argparse.Namespace, cfg: AstraConfig) -> Plan:
     objective = args.objective or cfg.planner.objective
     hop = cfg.fabric.network_hop_ms / 1000.0
     model = _profile(args)
+    draft = _draft(args, model)
     budgets, warnings = _budgets(args, cfg, util, reserve)
     if not budgets:
         raise AstraError("no GPUs found locally or on the fabric")
@@ -123,16 +151,32 @@ def _make_plan(args: argparse.Namespace, cfg: AstraConfig) -> Plan:
             objective,
             cfg.planner.exclude_gpus,
             network_hop_s=hop,
+            draft=draft,
         )
     chosen = budgets if selector == "all" else _select(budgets, args.gpus)
-    return plan(model, chosen, args.engine, context, util, warnings, objective, network_hop_s=hop)
+    return plan(
+        model,
+        chosen,
+        args.engine,
+        context,
+        util,
+        warnings,
+        objective,
+        network_hop_s=hop,
+        draft=draft,
+    )
 
 
 def _launch_spec(args: argparse.Namespace, result: Plan) -> engines.LaunchSpec:
     if result.engine == "llamacpp":
         model_path = args.gguf or "<path/to/model.gguf>"
         return engines.llamacpp(
-            result, model_path, args.host, args.port or 8080, args.binary or "llama-server"
+            result,
+            model_path,
+            args.host,
+            args.port or 8080,
+            args.binary or "llama-server",
+            draft_path=getattr(args, "draft_gguf", None),
         )
     return engines.vllm(result, args.model_ref, args.host, args.port or 8000, args.binary or "vllm")
 
@@ -148,7 +192,8 @@ def _format_plan(result: Plan, spec: engines.LaunchSpec | None) -> str:
     out = [
         f"Plan: {m.name} via {result.engine}, context {result.context}, "
         f"objective {result.objective}",
-        f"  weights {fmt_bytes(m.weights_bytes)}, {m.n_layers} layers, source {m.source}",
+        f"  weights {fmt_bytes(m.weights_bytes)}, {m.n_layers} layers, source {m.source}, "
+        f"KV cache {m.kv_dtype}",
         f"  VRAM ratio: {_pct(result.vram_ratio)}   planned share: "
         f"{_pct(result.planned_share)}   {speed}",
         "",
@@ -166,6 +211,15 @@ def _format_plan(result: Plan, spec: engines.LaunchSpec | None) -> str:
             f"{fmt_bytes(p.kv_bytes):>12}{fmt_bytes(p.fixed_bytes):>12}{fmt_bytes(p.device.reserve_bytes):>12}"
             f"{fmt_bytes(p.required_bytes):>12}{fmt_bytes(p.device.capacity_bytes):>12}"
             f"{fmt_bytes(p.headroom_bytes):>12}"
+        )
+    if result.draft is not None and result.draft_stage is not None:
+        from astra.planner.split import draft_bytes
+
+        host = result.placements[result.draft_stage].device
+        out.append(
+            f"  draft {result.draft.name}: {fmt_bytes(draft_bytes(result.draft, result.context))} "
+            f"on GPU {host.index} (in FIXED); speculative decoding, measured +20-40 % "
+            "on slow pools"
         )
     out += [
         "",
@@ -382,10 +436,14 @@ def compose_env(result: Plan, args: argparse.Namespace) -> str:
         "ASTRA_PIPELINE_STAGES": str(len(result.placements)),
         "ASTRA_N_GPU_LAYERS": str(result.model.n_layers + 1),
         "ASTRA_CONTEXT": str(result.context),
+        "ASTRA_KV_TYPE": result.model.kv_dtype,
+        "ASTRA_FLASH_ATTN": "on" if result.model.kv_dtype != "f16" else "auto",
         "ASTRA_GPU_UTIL": f"{result.gpu_memory_utilization:.2f}",
         "ASTRA_MODEL": model,
     }
     header = f"# generated by `astra plan` for {result.model.name}; fits={result.fits}\n"
+    if result.draft is not None:
+        header += "# note: the Compose stack does not run the draft model (speculative decoding)\n"
     return header + "".join(f"{k}={v}\n" for k, v in values.items())
 
 
@@ -490,6 +548,7 @@ def cmd_auto(args: argparse.Namespace, cfg: AstraConfig) -> int:
         cluster=not args.no_cluster,
         launch=not args.no_launch,
         ui=not args.no_ui,
+        draft=args.draft,
     )
     return run(cfg, opts, lambda text: print(text, flush=True))
 
@@ -604,10 +663,60 @@ def cmd_gpus(args: argparse.Namespace, cfg: AstraConfig) -> int:
 def cmd_models(args: argparse.Namespace, cfg: AstraConfig) -> int:
     print("Models (use with --model):")
     for key, a in CATALOG.items():
-        print(f"  {key:<14} {a.display:<28} {a.n_params / 1e9:5.1f}B params, {a.n_layers} layers")
+        draft = f", draft {a.draft}" if a.draft else ""
+        print(
+            f"  {key:<14} {a.display:<28} {a.n_params / 1e9:5.1f}B params, "
+            f"{a.n_layers} layers{draft}"
+        )
     print("\nQuantizations (use with --quant):")
     for key, q in QUANTS.items():
         print(f"  {key:<10} ~{q.layer_bits:.2f} bits/weight   engines: {', '.join(q.engines)}")
+    return 0
+
+
+def cmd_size(args: argparse.Namespace, cfg: AstraConfig) -> int:
+    from astra.planner.sizing import size_stack
+
+    quant = args.quant or "q4_k_m"
+    model = from_catalog(args.model, quant, args.kv_type)
+    context = args.context or cfg.planner.default_context
+    util = cfg.planner.gpu_memory_utilization
+    options = size_stack(
+        model,
+        context,
+        args.min_tps,
+        util,
+        cfg.planner.reserve_mib,
+        have=args.have,
+        max_count=args.max_gpus,
+        include_legacy=args.include_legacy,
+        only=args.gpu,
+    )
+    if args.json:
+        print(json.dumps([o.to_dict() for o in options], indent=2))
+        return 0 if options else 1
+    have = f" added to: {args.have}" if args.have else ""
+    print(
+        f"{model.name}, context {context}, KV {model.kv_dtype}: "
+        f"GPUs to reach >= {args.min_tps:g} tok/s{have}"
+    )
+    if not options:
+        print(
+            "  no GPU type reaches the target with <= "
+            f"{args.max_gpus} cards; a smaller quant (--quant) or --min-tps lowers the bar"
+        )
+        return 1
+    print(f"\n  {'ADD':<5}{'GPU':<22}{'VRAM':>7}{'POOL':>10}{'EST tok/s':>11}{'RATED W':>9}")
+    for o in options[: args.top]:
+        print(
+            f"  {o.count:<5}{o.gpu:<22}{o.vram_mib / 1024:>5g}GB{fmt_bytes(o.pool_vram_bytes):>10}"
+            f"{(o.tokens_per_s or 0):>11.1f}{o.rated_power_w:>9}"
+        )
+    print(
+        "\n  Estimates: bandwidth-bound decode, one stream (within 2-14 % on real hardware)."
+        "\n  Speculative decoding (--draft auto) adds ~20-40 % on pools below ~30 tok/s."
+        '\n  Check power and slots with `astra compat --simulate "<n>x <GPU>"`.'
+    )
     return 0
 
 
@@ -627,6 +736,13 @@ def _add_plan_args(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--kv-type", choices=["f16", "q8_0", "q4_0"], default="f16", help="KV cache dtype"
     )
+    p.add_argument(
+        "--draft",
+        default="none",
+        help="speculative decoding: 'none' (default), 'auto' (the catalog's draft for the "
+        "model) or a catalog key; llama.cpp only",
+    )
+    p.add_argument("--draft-gguf", help="draft model GGUF file (same tokenizer as the model)")
     p.add_argument(
         "--gpus",
         help="'auto' (default: fastest GPU set that fits), 'all', or a comma list of "
@@ -730,6 +846,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-cluster", action="store_true", help="skip network discovery")
     p.add_argument("--no-launch", action="store_true", help="only detect, configure and recommend")
     p.add_argument("--no-ui", action="store_true", help="exit after verifying (no console)")
+    p.add_argument(
+        "--draft",
+        choices=["auto", "on", "off"],
+        default="auto",
+        help="speculative decoding: auto = try it on slow pools (< 30 tok/s) and keep it if "
+        "faster; on = always try it; off = never",
+    )
     p.set_defaults(func=cmd_auto)
 
     p = sub.add_parser("ui", help="web console: topology, plans, health and chat")
@@ -758,6 +881,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("models", help="list catalog models and quantizations")
     p.set_defaults(func=cmd_models)
+
+    p = sub.add_parser(
+        "size", help="which GPUs (ASTRA Stack bricks) to buy for a model and a speed target"
+    )
+    p.add_argument("--model", required=True, choices=sorted(CATALOG))
+    p.add_argument("--quant", choices=["q8_0", "q6_k", "q5_k_m", "q4_k_m"], help="default q4_k_m")
+    p.add_argument("--min-tps", type=float, default=8.0, help="speed target (default 8 tok/s)")
+    p.add_argument("--context", type=int, help="context length (default from config)")
+    p.add_argument("--kv-type", choices=["f16", "q8_0", "q4_0"], default="f16")
+    p.add_argument("--have", metavar="SPEC", help="GPUs you already own, e.g. 'RTX 3060 Ti'")
+    p.add_argument("--gpu", help="only consider GPU models containing this text")
+    p.add_argument("--max-gpus", type=int, default=8, help="most cards to add (default 8)")
+    p.add_argument("--include-legacy", action="store_true", help="also pre-Turing GPUs")
+    p.add_argument("--top", type=int, default=12, help="options to show (default 12)")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_size)
     return parser
 
 

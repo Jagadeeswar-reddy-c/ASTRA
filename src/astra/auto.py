@@ -41,13 +41,25 @@ from astra.hardware.compat import CompatReport, GpuCaps, analyse
 from astra.hardware.models import Inventory
 from astra.hardware.probe import probe
 from astra.planner import engines
-from astra.planner.models import CATALOG, QUANTS, from_catalog, from_gguf, gguf_download
-from astra.planner.split import DeviceBudget, Plan, select_gpus
+from astra.planner.models import (
+    CATALOG,
+    DRAFT_QUANT,
+    QUANTS,
+    ModelProfile,
+    from_catalog,
+    from_gguf,
+    gguf_download,
+    gguf_files,
+)
+from astra.planner.split import SPEC_MAX_TPS, DeviceBudget, Plan, select_gpus
 from astra.units import MIB, fmt_bytes
 from astra.validation.checks import run_runtime_checks
 from astra.validation.report import Status
 
 AUTO_QUANTS = ("q8_0", "q6_k", "q5_k_m", "q4_k_m")
+AUTO_KV = ("f16", "q8_0")  # a q8_0 KV cache halves its memory for ~1 % speed (FT-SPEC-01)
+DRAFT_KEEP_GAIN = 1.05  # keep speculative decoding only if it measures >= 5 % faster
+PREFILL_PROMPT = ("The quick brown fox jumps over the lazy dog. " * 170).strip()  # ~1.7k tokens
 MIN_HEADROOM = 256 * MIB  # recommendations keep this much free on every GPU
 RELEASES_API = "https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=10"
 
@@ -63,6 +75,8 @@ class Recommendation:
     quant: str
     params_b: float
     plan: Plan
+    kv: str = "f16"
+    draft: str | None = None  # catalog key of the speculative-decoding draft
 
     @property
     def tokens_per_s(self) -> float | None:
@@ -84,40 +98,75 @@ def recommend(
     min_tps: float = 8.0,
     models: Sequence[str] | None = None,
     quants: Sequence[str] = AUTO_QUANTS,
+    use_draft: str = "auto",
 ) -> list[Recommendation]:
     """Every downloadable catalog model/quant that fits with margin, best first.
 
     Best = most parameters (a larger model at Q4 beats a smaller one at Q8), then the
-    higher-precision quantization, then speed.
+    higher-precision quantization, then speed. A q8_0 KV cache is used only when the
+    f16 cache does not fit. Pools slower than SPEC_MAX_TPS get the model's draft for
+    speculative decoding when it fits too (kept at launch only if it measures faster);
+    ``use_draft='on'`` tries it at any speed, ``'off'`` never.
     """
     util = cfg.planner.gpu_memory_utilization
     hop = cfg.fabric.network_hop_ms / 1000
+
+    def attempt(profile: ModelProfile, draft: ModelProfile | None = None) -> Plan | None:
+        try:
+            p = select_gpus(
+                profile,
+                budgets,
+                "llamacpp",
+                context,
+                util,
+                [],
+                cfg.planner.objective,
+                cfg.planner.exclude_gpus,
+                network_hop_s=hop,
+                draft=draft,
+            )
+        except PlanningError:
+            return None
+        if not p.fits or min(pl.headroom_bytes for pl in p.placements) < MIN_HEADROOM:
+            return None
+        return p
+
     out = []
     for key in models or CATALOG:
         for quant in quants:
             if gguf_download(key, quant) is None:
                 continue
-            try:
-                p = select_gpus(
-                    from_catalog(key, quant),
-                    budgets,
-                    "llamacpp",
-                    context,
-                    util,
-                    [],
-                    cfg.planner.objective,
-                    cfg.planner.exclude_gpus,
-                    network_hop_s=hop,
-                )
-            except PlanningError:
-                continue
-            if not p.fits or min(pl.headroom_bytes for pl in p.placements) < MIN_HEADROOM:
+            for kv in AUTO_KV:
+                p = attempt(from_catalog(key, quant, kv))
+                if p is not None:
+                    break
+            if p is None:
                 continue
             tps = p.est_decode_tokens_per_s
             if tps is not None and tps < min_tps:
                 continue
-            out.append(Recommendation(key, quant, CATALOG[key].n_params / 1e9, p))
-    out.sort(key=lambda r: (-r.params_b, -QUANTS[r.quant].layer_bits, -(r.tokens_per_s or 0)))
+            draft_key = CATALOG[key].draft
+            slow = tps is not None and tps <= SPEC_MAX_TPS
+            if draft_key and (use_draft == "on" or (use_draft == "auto" and slow)):
+                with_draft = attempt(
+                    from_catalog(key, quant, kv), from_catalog(draft_key, DRAFT_QUANT, kv)
+                )
+                if with_draft is not None and with_draft.draft is not None:
+                    out.append(
+                        Recommendation(
+                            key, quant, CATALOG[key].n_params / 1e9, with_draft, kv, draft_key
+                        )
+                    )
+                    continue
+            out.append(Recommendation(key, quant, CATALOG[key].n_params / 1e9, p, kv))
+    out.sort(
+        key=lambda r: (
+            -r.params_b,
+            -QUANTS[r.quant].layer_bits,
+            r.kv != "f16",
+            -(r.tokens_per_s or 0),
+        )
+    )
     return out
 
 
@@ -206,16 +255,17 @@ def ensure_llama_server(
     raise AstraError(f"no Windows CUDA {major}.x llama.cpp build found in the latest releases")
 
 
-def ensure_model(lab: Path, rec: Recommendation, echo: Echo) -> Path:
-    info = gguf_download(rec.model, rec.quant)
-    assert info is not None
-    name, url = info
-    path = lab / "models" / name
-    if path.is_file():
-        return path
-    echo(f"    downloading {name}")
-    _download(url, path, echo)
-    return path
+def ensure_model(lab: Path, model: str, quant: str, echo: Echo) -> Path:
+    """Download every part of a catalog GGUF that is missing; return the file to load."""
+    files = gguf_files(model, quant)
+    if not files:
+        raise AstraError(f"no download source for {model} {quant}")
+    for name, url in files:
+        path = lab / "models" / name
+        if not path.is_file():
+            echo(f"    downloading {name}")
+            _download(url, path, echo)
+    return lab / "models" / files[0][0]
 
 
 # ---------------------------------------------------------------------------- config
@@ -264,6 +314,7 @@ class AutoOptions:
     cluster: bool = True
     launch: bool = True
     ui: bool = True
+    draft: str = "auto"  # auto | on | off
 
 
 def _post(url: str, body: dict[str, Any], timeout: float = 300) -> dict[str, Any]:
@@ -380,13 +431,18 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
     echo(f"[4/6] Choosing a model for this pool (context {opts.context})")
     models = [opts.model] if opts.model else None
     quants = [opts.quant] if opts.quant else AUTO_QUANTS
-    recs = recommend(the_pool.budgets, cfg, opts.context, opts.min_tps, models, quants)
+    recs = recommend(
+        the_pool.budgets, cfg, opts.context, opts.min_tps, models, quants, use_draft=opts.draft
+    )
     if not recs:
         echo("    nothing in the catalog fits with margin; try a smaller --context")
         return 1
     for r in recs[:6]:
         tps = f"~{r.tokens_per_s:.0f} tok/s" if r.tokens_per_s else "speed n/a"
-        echo(f"    {r.model:<13} {r.quant:<7} {tps:>12}  on {r.gpus}")
+        extras = "".join(
+            [f", KV {r.kv}" if r.kv != "f16" else "", f", draft {r.draft}" if r.draft else ""]
+        )
+        echo(f"    {r.model:<13} {r.quant:<7} {tps:>12}  on {r.gpus}{extras}")
     best = recs[0]
     echo(f"    -> {CATALOG[best.model].display} {best.quant.upper()}")
     if not opts.launch:
@@ -395,28 +451,39 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
     # 5. prepare --------------------------------------------------------------
     echo("[5/6] Preparing llama.cpp and the model")
     server = ensure_llama_server(opts.lab, report.caps, opts.binary, echo)
-    gguf = ensure_model(opts.lab, best, echo)
+    gguf = ensure_model(opts.lab, best.model, best.quant, echo)
+    draft_gguf = ensure_model(opts.lab, best.draft, DRAFT_QUANT, echo) if best.draft else None
     echo(f"    engine {server}")
     echo(f"    model  {gguf}")
-    profile = from_gguf(gguf)
-    final = select_gpus(
-        profile,
-        the_pool.budgets,
-        "llamacpp",
-        opts.context,
-        util,
-        the_pool.notes,
-        cfg.planner.objective,
-        cfg.planner.exclude_gpus,
-        network_hop_s=cfg.fabric.network_hop_ms / 1000,
-    )
-    if not final.fits:
+    if draft_gguf:
+        echo(f"    draft  {draft_gguf}")
+    profile = from_gguf(gguf, best.kv)
+    draft_profile = from_gguf(draft_gguf, best.kv) if draft_gguf else None
+
+    def exact_plan(draft: ModelProfile | None) -> Plan:
+        return select_gpus(
+            profile,
+            the_pool.budgets,
+            "llamacpp",
+            opts.context,
+            util,
+            the_pool.notes,
+            cfg.planner.objective,
+            cfg.planner.exclude_gpus,
+            network_hop_s=cfg.fabric.network_hop_ms / 1000,
+            draft=draft,
+        )
+
+    base = exact_plan(None)
+    if not base.fits:
         raise AstraError("the downloaded model does not fit after exact sizing; lower --context")
-    spec = engines.llamacpp(final, str(gguf), "127.0.0.1", opts.port, server)
-    plan_doc = final.to_dict()
-    plan_doc["launch"] = {"argv": list(spec.argv), "env": spec.env, "notes": list(spec.notes)}
+    variants: list[Plan] = [base]
+    if draft_profile is not None:
+        with_draft = exact_plan(draft_profile)
+        if with_draft.fits and with_draft.draft is not None:
+            variants.append(with_draft)
+    style = engines.spec_flag_style(_help_text(server))
     out.mkdir(parents=True, exist_ok=True)
-    (out / "plan.json").write_text(json.dumps(plan_doc, indent=2), encoding="utf-8")
 
     # 6. launch + verify ------------------------------------------------------
     echo("[6/6] Launching and verifying")
@@ -424,33 +491,68 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
         raise AstraError(
             f"port {opts.port} is already in use (another engine?): stop it or pass --port"
         )
-    log = out / "llama-server.log"
     url = f"http://127.0.0.1:{opts.port}"
-    with log.open("wb") as log_fh:
-        proc = subprocess.Popen(
-            list(spec.argv), env={**os.environ, **spec.env}, stdout=log_fh, stderr=subprocess.STDOUT
-        )
+    runs: list[tuple[Plan, dict[str, Any], Bench]] = []
+    proc: subprocess.Popen[bytes] | None = None
     try:
-        _wait_healthy(url, proc, log)
+        for i, variant in enumerate(variants):
+            spec = engines.llamacpp(
+                variant,
+                str(gguf),
+                "127.0.0.1",
+                opts.port,
+                server,
+                draft_path=str(draft_gguf) if variant.draft else None,
+                spec_style=style,
+            )
+            doc = variant.to_dict()
+            doc["launch"] = {"argv": list(spec.argv), "env": spec.env, "notes": list(spec.notes)}
+            label = "with speculative decoding" if variant.draft else "baseline"
+            if proc is not None:
+                _stop(proc)
+            proc = _start(spec, out / f"llama-server-{i}.log", url)
+            bench = _bench(url)
+            echo(
+                f"    {label:<26} {bench.decode_tps:6.1f} tok/s, "
+                f"time to first token for 2k prompt ~{bench.ttft_2k_s:.2f} s"
+                + (f", draft acceptance {bench.acceptance:.0%}" if bench.acceptance else "")
+            )
+            runs.append((variant, doc, bench))
+        final, plan_doc, bench = runs[0]
+        if len(runs) > 1 and runs[1][2].decode_tps >= runs[0][2].decode_tps * DRAFT_KEEP_GAIN:
+            final, plan_doc, bench = runs[1]
+            echo(
+                f"    keeping speculative decoding "
+                f"(+{(runs[1][2].decode_tps / runs[0][2].decode_tps - 1) * 100:.0f} %)"
+            )
+        elif len(runs) > 1:
+            echo("    speculative decoding did not pay off here; back to the baseline")
+            assert proc is not None
+            _stop(proc)
+            base_spec = plan_doc["launch"]
+            proc = _start(
+                engines.LaunchSpec(tuple(base_spec["argv"]), base_spec["env"]),
+                out / "llama-server.log",
+                url,
+            )
+        (out / "plan.json").write_text(json.dumps(plan_doc, indent=2), encoding="utf-8")
         echo(f"    engine healthy at {url}")
-        speeds = []
-        for _ in range(2):
-            t = _post(
-                f"{url}/completion",
-                {
-                    "prompt": "Explain how several GPUs can share one model.",
-                    "n_predict": 200,
-                    "cache_prompt": False,
-                },
-            )["timings"]
-            speeds.append(float(t["predicted_per_second"]))
-        measured = sum(speeds) / len(speeds)
+        measured = bench.decode_tps
         estimate = final.est_decode_tokens_per_s or 0
-        delta = (measured - estimate) / estimate * 100 if estimate else 0.0
-        echo(
-            f"    speed: {measured:.1f} tok/s measured vs ~{estimate:.0f} estimated "
-            f"({delta:+.0f} %)"
-        )
+        if final.draft is None:
+            delta = (measured - estimate) / estimate * 100 if estimate else 0.0
+            echo(
+                f"    speed: {measured:.1f} tok/s measured vs ~{estimate:.0f} estimated "
+                f"({delta:+.0f} %)"
+            )
+        else:
+            # The estimate is for plain decoding; compare the baseline run against it.
+            base_measured = runs[0][2].decode_tps
+            delta = (base_measured - estimate) / estimate * 100 if estimate else 0.0
+            echo(
+                f"    speed: {measured:.1f} tok/s with speculative decoding; baseline "
+                f"{base_measured:.1f} vs ~{estimate:.0f} estimated ({delta:+.0f} %)"
+            )
 
         def background_load() -> None:
             # Keeps the GPU busy while the gate samples; the engine may be stopped mid-request.
@@ -473,11 +575,16 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
             "remote_nodes": [n.name for n in remote],
             "model": profile.name,
             "quant": best.quant,
+            "kv_cache": best.kv,
+            "draft": final.draft.name if final.draft else None,
             "context": opts.context,
             "layer_counts": list(final.layer_counts),
             "estimate_tok_s": round(estimate, 1),
             "measured_tok_s": round(measured, 1),
             "delta_percent": round(delta, 1),
+            "prefill_tok_s": round(bench.prefill_tps, 1),
+            "ttft_2k_prompt_s": round(bench.ttft_2k_s, 2),
+            "runs": [{"draft": v.draft is not None, **b.to_dict()} for v, _, b in runs],
             "runtime_gate": "PASS" if gate_ok else "FAIL",
         }
         (out / "results.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
@@ -498,12 +605,85 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
             )
         return 0 if verdict == "PASS" else 1
     finally:
-        if proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+        if proc is not None:
+            _stop(proc)
+
+
+@dataclass(frozen=True)
+class Bench:
+    decode_tps: float
+    prefill_tps: float
+    acceptance: float | None  # accepted / drafted tokens, with speculative decoding
+
+    @property
+    def ttft_2k_s(self) -> float:
+        """Time to first token for a 2,000-token prompt."""
+        return 2000 / self.prefill_tps if self.prefill_tps else 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "decode_tok_s": round(self.decode_tps, 1),
+            "prefill_tok_s": round(self.prefill_tps, 1),
+            "draft_acceptance": None if self.acceptance is None else round(self.acceptance, 2),
+        }
+
+
+BENCH_PROMPTS = (
+    "Explain how several GPUs can share one model.",
+    "Write a Python function that parses a CSV file and returns the average of each column.",
+)
+
+
+def _bench(url: str) -> Bench:
+    """Decode speed over two different prompts, prefill speed over a ~1.7k-token prompt."""
+    speeds, drafted, accepted = [], 0, 0
+    for prompt in BENCH_PROMPTS:
+        t = _post(f"{url}/completion", {"prompt": prompt, "n_predict": 200, "cache_prompt": False})[
+            "timings"
+        ]
+        speeds.append(float(t["predicted_per_second"]))
+        drafted += int(t.get("draft_n") or 0)
+        accepted += int(t.get("draft_n_accepted") or 0)
+    t = _post(
+        f"{url}/completion", {"prompt": PREFILL_PROMPT, "n_predict": 1, "cache_prompt": False}
+    )["timings"]
+    return Bench(
+        sum(speeds) / len(speeds),
+        float(t.get("prompt_per_second") or 0.0),
+        accepted / drafted if drafted else None,
+    )
+
+
+def _help_text(server: str) -> str:
+    try:
+        done = subprocess.run(
+            [server, "--help"], capture_output=True, text=True, timeout=30, errors="replace"
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return done.stdout + done.stderr
+
+
+def _start(spec: engines.LaunchSpec, log: Path, url: str) -> subprocess.Popen[bytes]:
+    with log.open("wb") as log_fh:
+        proc = subprocess.Popen(
+            list(spec.argv), env={**os.environ, **spec.env}, stdout=log_fh, stderr=subprocess.STDOUT
+        )
+    try:
+        _wait_healthy(url, proc, log)
+    except BaseException:
+        _stop(proc)
+        raise
+    return proc
+
+
+def _stop(proc: subprocess.Popen[bytes]) -> None:
+    if proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            proc.kill()
 
 
 def default_lab() -> Path:

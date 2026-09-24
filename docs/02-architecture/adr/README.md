@@ -18,3 +18,5 @@ immutable; to change a decision, write a new ADR that supersedes it.
 | [0011](0011-astra-fabric.md) | ASTRA Fabric: exo-style GPU pooling across machines (llama.cpp RPC) | Accepted (CR-003) |
 | [0012](0012-web-console.md) | Web console (`astra ui`): topology, planning, health, chat | Accepted (CR-004) |
 | [0013](0013-zero-input-automation.md) | Zero-input automation (`astra auto`) with NVIDIA topology detection | Accepted (CR-005) |
+| [0014](0014-astra-stack-bricks.md) | ASTRA Stack: 1-GPU bricks on a PCIe star | Accepted (CR-006) |
+| [0015](0015-measured-speed-tuning.md) | Speed features (speculative decoding, KV cache type) are measured, not assumed | Accepted |
