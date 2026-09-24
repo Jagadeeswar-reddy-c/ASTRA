@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from astra import cli
+from astra import cli, pool
 from astra.config import AstraConfig, parse_config
 from astra.errors import ParseError, PlanningError
 from astra.fabric.agent import (
@@ -277,6 +277,7 @@ def test_cli_cluster_and_plan_with_live_agent(
         raise CommandError("nvidia-smi not found on PATH")
 
     monkeypatch.setattr(cli, "probe", no_driver)
+    monkeypatch.setattr(pool, "probe", no_driver)  # plans collect GPUs through astra.pool
     code = cli.main(
         [
             "plan",

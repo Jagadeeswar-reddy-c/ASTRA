@@ -5,6 +5,12 @@ versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- docs/01-requirements/limitations-and-backlog.md: known limitations (hard limits and
+  fixable ones) and the ordered backlog BL-01…BL-19.
+- ASTRA Stack study (ASTRA-ARC-004) and CR-006 (proposed): DGX Spark-style stackable
+  1-GPU bricks on a PCIe star, compared with DGX Spark; risk R-15.
+
 ## [0.5.1] — 2026-09-24
 
 New-user acceptance test PASS from a fresh clone (report: docs/05-testing/reports/new-user-test.md).

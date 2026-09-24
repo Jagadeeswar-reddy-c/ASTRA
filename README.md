@@ -21,6 +21,8 @@ the node:
 | **Connecting more GPUs** (x16 / x8 / x4 / x1, risers, OCuLink, bifurcation, switch, network) | [`docs/03-solution-design/connecting-gpus.md`](docs/03-solution-design/connecting-gpus.md) |
 | **One-command test on your PC** | `powershell -ExecutionPolicy Bypass -File scripts\stage0-test.ps1` |
 | **Supported GPUs** (`astra gpus`) | [`docs/03-solution-design/supported-gpus.md`](docs/03-solution-design/supported-gpus.md) |
+| **Known limitations and backlog** | [`docs/01-requirements/limitations-and-backlog.md`](docs/01-requirements/limitations-and-backlog.md) |
+| **ASTRA Stack: stackable modules like DGX Spark** (proposed, CR-006) | [`docs/02-architecture/studies/astra-stack-modules.md`](docs/02-architecture/studies/astra-stack-modules.md) |
 | Deployment guide, release process | [`docs/06-deployment`](docs/06-deployment) |
 | Monitoring and runbooks | [`docs/07-operations`](docs/07-operations) |
 | Control-plane source (`astra` CLI) | [`src/astra`](src/astra) |
