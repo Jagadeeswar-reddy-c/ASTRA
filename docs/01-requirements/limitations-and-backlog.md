@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document ID | ASTRA-REQ-003 |
-| Version | 1.2 (2026-09-24), state after v0.7.0 |
+| Version | 1.3 (2026-09-24), state after v0.8.0 |
 | Owner | Product Manager · Reviewers: Enterprise Architect, Solution Architect, QA Lead |
 | Purpose | One honest list of what ASTRA cannot do yet, why, and the backlog item that fixes it |
 
@@ -16,7 +16,7 @@ design works around it.
 | ID | Limitation | Why | How ASTRA lives with it |
 |---|---|---|---|
 | LIM-01 | The pooled GPUs are **not one CUDA device**. Apps that expect one big GPU (PyTorch scripts, ComfyUI, games, Resolve) see separate cards | GeForce has P2P disabled; a kernel cannot be split across GPUs; remote memory is 35–100× slower ([vMerge study](../02-architecture/studies/vmerge-feasibility.md)) | Split the **model**, not the kernel: one endpoint, one console, one pool. vMerge layer 1 (BL-01) brings this to PyTorch apps |
-| LIM-02 | **Adding GPUs adds memory, not single-user speed.** Pipeline decode speed ≈ the bandwidth-weighted average of the cards used, minus hop costs | Pipeline parallelism runs the stages one after another for each token. Tensor parallelism would add speed, but it needs fast GPU-to-GPU links that GeForce does not have | The planner keeps slow cards out unless their memory is needed. Concurrent users do scale (BL-10) |
+| LIM-02 | ~~Adding GPUs adds memory, not single-user speed~~ **Downgraded in v0.8.0**: true for the layer split and across machines; inside one machine the **tensor split** adds speed (ADR-0016, [study](../05-testing/reports/tensor-parallel-study.md)) | Tensor split needs 2 all-reduces per layer: over host memory it gains less than with P2P or NVLink, and never across the network | `--split auto`; NVLink pairs; P2P switch (CR-007) |
 | LIM-03 | Mixing generations is limited by **one driver per host**: Pascal/Maxwell cap it at R580, Kepler is out, Blackwell needs ≥ R570 | NVIDIA driver branch support | `astra compat` / L11 before purchase; RB-07 |
 | LIM-04 | **NVIDIA only** (no AMD, Intel or Apple GPUs) | Detection, validation and launch are built on nvidia-smi and CUDA | Out of scope (PRD). llama.cpp RPC could carry a Vulkan/ROCm node later (BL-19) |
 | LIM-05 | **No PCIe hot-plug**: GPUs and chassis are added with the power off | Consumer boards and BIOSes do not support PCIe hot-plug | Power off, add, boot, `astra auto` re-plans |
@@ -45,6 +45,7 @@ design works around it.
 | LIM-27 | Recommendation uses **free memory right now** on a display GPU (NU-03) | The model choice changes with what else is open | By design; `--model/--quant` pins it | — |
 | LIM-29 | ~~`--kv-type q8_0` was planned but never passed to the engine or Compose~~ **Fixed in v0.6.0** (PF-07) | — | — | done |
 | LIM-30 | Speculative decoding helps only slow pools (+21–38 %) and costs speed on fast ones (−15 %); the Compose stack does not run a draft | Single fast GPUs gain nothing from it | ADR-0015 (measured A/B) | — |
+| LIM-31 | llama.cpp's tensor mode is experimental (no quantized KV, no MoE); GeForce P2P needs an unofficial Linux driver and Resizable BAR (off on the dev PC) | Tensor gains on PCIe-only hosts stay at the host all-reduce level | ADR-0016 A/B; CR-007 Phase A | P2 |
 | LIM-28 | Governance: G0/G1 sign-offs, CR-002 (bifurcation path) and the mini-PC specs are pending | Hardware BOM cannot freeze | Sponsor decision | **P1** |
 
 ## 3. Backlog (ordered)
@@ -66,6 +67,7 @@ design works around it.
 | BL-07 | Pre-seed the rpc-server cache | LIM-17 | S | — |
 | BL-12 | NVML-based memory accounting on Windows | LIM-22 | S | — |
 | BL-13 | Standby head node | LIM-23 | L | BL-05 |
+| BL-20 | Backplane PCB: Phase A (qualify a Gen4 P2P switch board + tensor split, TC-HW-14), Phase B (own PCB, CR-007) | LIM-31, R-09 | L | CR-007 decision |
 | BL-19 | Non-NVIDIA nodes via llama.cpp RPC (Vulkan/ROCm/Metal) | LIM-04 | M | PRD change |
 
 Sizes: S ≤ 2 days, M ≤ 2 weeks, L > 2 weeks (including tests and docs).

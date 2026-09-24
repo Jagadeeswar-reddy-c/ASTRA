@@ -36,10 +36,13 @@ def probe(
             if path is not None:
                 paths[gpu.uuid] = path
 
-    links = nvtopo.query(runner) if with_topology and len(report.gpus) > 1 else {}
+    multi = with_topology and len(report.gpus) > 1
+    links = nvtopo.query(runner) if multi else {}
+    p2p = nvtopo.query_p2p(runner) if multi else {}
 
     return Inventory(
         gpu_links=links,
+        gpu_p2p=p2p,
         gpus=report.gpus,
         driver_version=report.driver_version,
         cuda_version=report.cuda_version,

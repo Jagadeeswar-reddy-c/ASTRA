@@ -140,6 +140,58 @@ def _make_plan(args: argparse.Namespace, cfg: AstraConfig) -> Plan:
     if not budgets:
         raise AstraError("no GPUs found locally or on the fabric")
     selector = (args.gpus or "auto").strip().lower()
+    layer = _layer_plan(args, model, draft, budgets, warnings, context, util, objective, hop, cfg)
+    split = getattr(args, "split", "layer") or "layer"
+    if split == "layer":
+        return layer
+    from astra.planner.tensor import better, detect_interconnect, plan_tensor
+
+    pool_b = budgets if selector in ("auto", "all") else _select(budgets, args.gpus)
+    local = [b for b in pool_b if not b.is_remote]
+    if selector == "auto":
+        from astra.planner.split import _excluded
+
+        local = [b for b in local if not _excluded(b, cfg.planner.exclude_gpus)]
+    link = getattr(args, "interconnect", "auto") or "auto"
+    if link == "auto":
+        link = "host" if args.simulate else detect_interconnect(local)
+    try:
+        if len(local) < 2 and len(local) < len(pool_b):
+            raise AstraError(
+                f"tensor split uses GPUs in one machine only; this machine has {len(local)} "
+                "(remote GPUs join through the layer split)"
+            )
+        tensor = plan_tensor(model, local, args.engine, context, util, link, warnings, draft)
+    except AstraError as exc:
+        if split == "tensor":
+            raise
+        return replace(layer, warnings=(*layer.warnings, f"tensor split not possible: {exc}"))
+    if split == "tensor":
+        return tensor
+    chosen = better(layer, tensor)
+    other = tensor if chosen is layer else layer
+    tps = other.est_decode_tokens_per_s
+    note = f"{other.split_mode} split considered: ~{tps:.0f} tok/s" if tps else ""
+    if note:
+        chosen = replace(
+            chosen, warnings=(*chosen.warnings, note + ("" if other.fits else " (does not fit)"))
+        )
+    return chosen
+
+
+def _layer_plan(
+    args: argparse.Namespace,
+    model: ModelProfile,
+    draft: ModelProfile | None,
+    budgets: list[DeviceBudget],
+    warnings: list[str],
+    context: int,
+    util: float,
+    objective: str,
+    hop: float,
+    cfg: AstraConfig,
+) -> Plan:
+    selector = (args.gpus or "auto").strip().lower()
     if selector == "auto":
         return select_gpus(
             model,
@@ -194,6 +246,12 @@ def _format_plan(result: Plan, spec: engines.LaunchSpec | None) -> str:
         f"objective {result.objective}",
         f"  weights {fmt_bytes(m.weights_bytes)}, {m.n_layers} layers, source {m.source}, "
         f"KV cache {m.kv_dtype}",
+        f"  split: {result.split_mode}"
+        + (
+            f" ({result.interconnect} all-reduce)"
+            if result.split_mode == "tensor"
+            else " (pipeline)"
+        ),
         f"  VRAM ratio: {_pct(result.vram_ratio)}   planned share: "
         f"{_pct(result.planned_share)}   {speed}",
         "",
@@ -285,11 +343,25 @@ def _format_inventory(inv: Inventory, cfg: AstraConfig) -> str:
     elif platform.system() != "Linux":
         out += ["", "  (PCIe path / uplink detail requires Linux sysfs)"]
     if inv.gpu_links:
-        from astra.hardware.nvtopo import describe
+        from astra.hardware.nvtopo import P2P_MEANING, describe
 
-        out += ["", "  GPU-to-GPU links (nvidia-smi topo -m):"]
+        out += ["", "  GPU-to-GPU links (nvidia-smi topo -m / -p2p r):"]
         for (i, j), link in sorted(inv.gpu_links.items()):
-            out.append(f"    GPU{i} <-> GPU{j}: {link:<5} {describe(link)}")
+            p2p = inv.gpu_p2p.get((i, j))
+            p2p_text = f"; P2P {p2p} ({P2P_MEANING.get(p2p, p2p)})" if p2p else ""
+            out.append(f"    GPU{i} <-> GPU{j}: {link:<5} {describe(link)}{p2p_text}")
+        from astra.planner.tensor import classify_links
+
+        link_class = classify_links([g.index for g in inv.gpus], inv.gpu_links, inv.gpu_p2p)
+        out.append(f"    tensor split would all-reduce via: {link_class}")
+    bars = [g for g in inv.gpus if g.bar1_total_bytes]
+    if bars:
+        out += ["", "  BAR1 aperture (Resizable BAR):"]
+        for g in bars:
+            state = {True: "on", False: "off", None: "?"}[g.resizable_bar]
+            out.append(
+                f"    GPU {g.index}: {fmt_bytes(g.bar1_total_bytes)} (Resizable BAR {state})"
+            )
     return "\n".join(out)
 
 
@@ -564,6 +636,7 @@ def cmd_auto(args: argparse.Namespace, cfg: AstraConfig) -> int:
         launch=not args.no_launch,
         ui=not args.no_ui,
         draft=args.draft,
+        split=args.split,
     )
     return run(cfg, opts, lambda text: print(text, flush=True))
 
@@ -759,6 +832,20 @@ def _add_plan_args(p: argparse.ArgumentParser) -> None:
     )
     p.add_argument("--draft-gguf", help="draft model GGUF file (same tokenizer as the model)")
     p.add_argument(
+        "--split",
+        choices=["layer", "tensor", "auto"],
+        default="layer",
+        help="layer: pipeline (default, adds memory); tensor: every GPU works on every layer "
+        "(adds speed, one machine only); auto: the faster estimate",
+    )
+    p.add_argument(
+        "--interconnect",
+        choices=["auto", "host", "p2p", "nvlink"],
+        default="auto",
+        help="GPU-to-GPU link for tensor split: auto = detect with nvidia-smi (host when "
+        "simulating); p2p = PCIe switch / P2P driver; nvlink = NVLink bridge",
+    )
+    p.add_argument(
         "--gpus",
         help="'auto' (default: fastest GPU set that fits), 'all', or a comma list of "
         "index/UUID/bus id in pipeline order",
@@ -872,6 +959,13 @@ def build_parser() -> argparse.ArgumentParser:
         default="auto",
         help="speculative decoding: auto = try it on slow pools (< 30 tok/s) and keep it if "
         "faster; on = always try it; off = never",
+    )
+    p.add_argument(
+        "--split",
+        choices=["auto", "layer", "tensor"],
+        default="auto",
+        help="auto = also measure tensor split on 2+ local GPUs and keep the faster; "
+        "layer = pipeline only; tensor = always try tensor split",
     )
     p.set_defaults(func=cmd_auto)
 

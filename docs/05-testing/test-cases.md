@@ -35,6 +35,7 @@ defect link), **B** = blocked.
 | TC-SW-27 | `astra size`: 70B at 8 tok/s (2 × RTX 5090 first; 3 × RTX 3090; 4 × RTX 5060 Ti at 7.5), owned GPUs, filters, unreachable target, CLI and JSON | `test_performance.py` (sizing) | FR-22 | P |
 | TC-SW-28 | `astra auto` keeps speculative decoding only when it measures ≥ 5 % faster (restarts the baseline otherwise); q8_0 KV only when needed; every part of a split model downloaded | `test_performance.py` (auto) | FR-20, FR-23 | P |
 | TC-SW-29 | Bricks: `[[module]]` parsing and errors, config written by PowerShell (BOM / UTF-16), GPU assignment (ids before names, each GPU once), per-brick PSU budget and L12, L13 (missing, narrow/slow link, daisy chain vs one switch), exporter `astra_module_*`, `--emit-config --stack` round trip, `compat` listing, console labels | `tests/unit/test_stack.py` | FR-21 | P |
+| TC-SW-30 | Tensor split: all-reduce cost by link and GPU count, link classification (NVLink / P2P / host), `topo -p2p r` parsing, BAR1 / Resizable BAR, water-filling shares, 70B speed-up bounds, model vs published data (TP=2 gain, TP=4 ≈ TP=2 for 7B, network all-reduce), constraints (remote, f16 KV, vLLM heads), launch flags, CLI modes, probe output, `astra auto` keeps tensor only when faster | `tests/unit/test_tensor.py` | FR-24 | P |
 | TC-SW-25 | `astra auto`: recommendation ranking, CUDA build choice, llama.cpp release selection and extraction, config create/match/change, nvidia-smi topo parsing and L04 fallback, dry run | `tests/unit/test_auto.py` | FR-20 | P |
 
 ## B. Hardware acceptance (reference node)
@@ -53,6 +54,9 @@ defect link), **B** = blocked.
 | TC-HW-10 | Cold-boot repeatability | 10 × full power-off (30 s) → boot → `systemctl status astra-selftest` | 10/10 PASS | NFR-10 | |
 | TC-HW-12 | GPU change procedure (CR-001) | Power off → swap/add a card → `astra compat` → `astra probe --emit-config` → review/commit the config → `astra validate` | L11 and L12 PASS; L02 matches the new as-built; re-plan and re-run the runtime gate | FR-13, FR-15 | |
 | TC-HW-13 | Stack of 4 bricks (CR-006, R-15) | Four 1-GPU bricks on the hub; cold boot × 5; `astra probe --emit-config --stack`; `astra validate` | All 4 GPUs enumerate every boot; L12 and L13 PASS | FR-21, NFR-10 | |
+| TC-HW-14 | GPU-to-GPU P2P and tensor split (CR-007 Phase A) | 2 same-generation GPUs behind a Gen4 switch, Linux, Resizable BAR on, P2P driver; `nvidia-smi topo -p2p r`; CUDA `p2pBandwidthLatencyTest`; `astra auto --split tensor` | P2P OK; bandwidth ≥ 20 GB/s; measured tensor speed within ±30 % of the estimate; update the P2P constant | FR-24 | |
+| TC-HW-15 | Backplane power telemetry | Per-slot readings vs a clamp meter at idle and full load | ±1 % above 10 W | FR-25 | |
+| TC-HW-16 | Backplane signal integrity | 4 GPUs at full load 30 min | Gen4 x16 held on every slot, 0 AER | HW-BP-03 | |
 | TC-HW-11 | Earthing and single source | Multimeter: frame ↔ PSU earth pin; check each GPU's 8-pin and backplane feed trace to the chassis PSU; both PSUs on one strip | < 0.1 Ω; no host-PSU lead into the chassis except relay sense | NFR-04 | |
 
 ## C. Runtime acceptance (reference node)
@@ -69,6 +73,7 @@ defect link), **B** = blocked.
 | TC-RT-10 | `astra auto` on a real machine | Run `astra auto` with no arguments | Detects all GPUs, writes config, recommends, downloads if needed, launches, speed within ±30 %, gate PASS | FR-20 | **P** (2026-09-24, RTX 3060 Ti: Qwen2.5-7B Q4_K_M, 74.4 vs 73 tok/s, 5/5) |
 | TC-RT-11 | New-user acceptance | Fresh `git clone`, empty config, no downloads; follow GETTING-STARTED.md | Install OK, `astra auto` downloads and verifies, RESULT PASS | FR-20 | **P** (2026-09-24, [report](reports/new-user-test.md)) |
 | TC-RT-12 | Speed levers on a real GPU | Benchmark baseline, q8_0 KV, drafts (n-max, p-min), n-gram; `astra auto --draft on` | Draft kept only if faster; gate PASS | FR-23 | **P** (2026-09-24, [report](reports/performance-field-test.md)) |
+| TC-RT-13 | Tensor split functional check (dev PC) | llama.cpp `--split-mode tensor` over CUDA0 + RPC0 loopback with ASTRA's flags; PCIe round-trip probe | Correct output; 16 KB round trip measured | FR-24 | **P** (2026-09-24: correct text, 17.6 tok/s over the network path as predicted; 14.2 µs round trip; [report](reports/tensor-parallel-study.md)) |
 | TC-RT-08 | Fabric: two machines | Machine B: `astra agent --rpc`; head: `astra cluster` then `astra plan --cluster --gguf <14B> --output plan.json`; launch; chat completions; `astra validate --phase runtime` on each node | Both nodes listed; plan uses GPUs on both; completions correct; per-token latency within 20 % of the estimate | FR-16, FR-17 | |
 | TC-RT-09 | Fabric resilience | Kill a node's rpc-server | Agent restarts it within 10 s; llama-server reports an error rather than wrong output; service recovers after restart | NFR-10 | |
 | TC-RT-07 | Ray elastic pool | `start_pool()`; submit 20 tasks with `resources={"gpu_ampere":1}` and 20 with `num_gpus=1` | Ampere tasks run only on the 3050; others spread across both | FR-09 | |

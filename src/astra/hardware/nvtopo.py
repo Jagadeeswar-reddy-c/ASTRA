@@ -46,6 +46,39 @@ def parse_topology(text: str) -> dict[tuple[int, int], str]:
     return links
 
 
+_P2P_CELL = re.compile(r"^(X|OK|NS|CNS|GNS|TNS|DR|U)$")
+P2P_MEANING = {
+    "OK": "peer-to-peer supported",
+    "NS": "not supported",
+    "CNS": "chipset does not support it",
+    "GNS": "GPU does not support it (GeForce driver policy)",
+    "TNS": "topology does not support it",
+    "DR": "disabled by registry key",
+    "U": "unknown",
+}
+
+
+def parse_p2p(text: str) -> dict[tuple[int, int], str]:
+    """{(i, j): status} for i < j from ``nvidia-smi topo -p2p r`` (read capability)."""
+    status: dict[tuple[int, int], str] = {}
+    for raw in _ANSI.sub("", text).splitlines():
+        parts = raw.split()
+        if len(parts) >= 2 and re.fullmatch(r"GPU\d+", parts[0]):
+            i = int(parts[0][3:])
+            cells = [c for c in parts[1:] if _P2P_CELL.match(c)]
+            for j, cell in enumerate(cells):
+                if i < j and cell != "X":
+                    status[(i, j)] = cell
+    return status
+
+
+def query_p2p(runner: CommandRunner) -> dict[tuple[int, int], str]:
+    try:
+        return parse_p2p(runner.run(["nvidia-smi", "topo", "-p2p", "r"]))
+    except CommandError:
+        return {}
+
+
 def describe(link: str) -> str:
     if link.startswith("NV"):
         return f"NVLink ×{link[2:]}"

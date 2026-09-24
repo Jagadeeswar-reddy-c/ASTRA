@@ -384,6 +384,17 @@ def analyse(
             f'mixed architectures: engine builds need CMAKE_CUDA_ARCHITECTURES="{cuda_archs}"',
         )
 
+    small_bar = [c for c in caps if c.gpu.resizable_bar is False]
+    if len(caps) > 1 and small_bar:
+        names = ", ".join(f"GPU {c.gpu.index}" for c in small_bar)
+        add(
+            "info",
+            "rebar_off",
+            f"{names}: BAR1 smaller than VRAM (Resizable BAR off). Direct GPU-to-GPU (P2P) "
+            "transfers need it: enable Above 4G Decoding + Resizable BAR in the BIOS; tensor "
+            "split then falls back to all-reduce via host memory",
+        )
+
     if caps and not any(c.nvenc for c in caps):
         add("info", "no_nvenc", "no NVENC-capable GPU: the partitioned transcode profile needs one")
 

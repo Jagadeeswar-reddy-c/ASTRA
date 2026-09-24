@@ -65,6 +65,8 @@ test, I = inspection, D = demonstration, A = analysis.
 | FR-15 | The system shall compute the chassis power budget from the installed GPUs, recommend a PSU size, and fail the link gate when the configured PSU is too small | M | T |
 | FR-21 | The system shall group GPUs into stack modules (bricks), budget power per brick and check each brick's link (CR-006) | S | T, D |
 | FR-22 | Given a model and a speed target, the system shall list which GPUs (how many of each type) reach it, optionally added to GPUs already owned (`astra size`) | S | T |
+| FR-24 | The system shall offer a tensor-parallel split across the GPUs of one machine, detect the GPU-to-GPU link (host memory, P2P, NVLink) with NVIDIA tools, estimate its speed, and keep it only when measured faster | S | T, D |
+| FR-25 | The backplane shall report measured power per GPU slot and PSU data to the control plane (CR-007) | C | T |
 | FR-23 | The system shall use speculative decoding and a quantized KV cache only where they help, decided by measurement on the actual pool, and report decode speed and time to first token | S | T, D |
 
 ## 4. Non-functional requirements

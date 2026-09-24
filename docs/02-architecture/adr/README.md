@@ -20,3 +20,4 @@ immutable; to change a decision, write a new ADR that supersedes it.
 | [0013](0013-zero-input-automation.md) | Zero-input automation (`astra auto`) with NVIDIA topology detection | Accepted (CR-005) |
 | [0014](0014-astra-stack-bricks.md) | ASTRA Stack: 1-GPU bricks on a PCIe star | Accepted (CR-006) |
 | [0015](0015-measured-speed-tuning.md) | Speed features (speculative decoding, KV cache type) are measured, not assumed | Accepted |
+| [0016](0016-tensor-parallel-split.md) | Tensor-parallel split inside one machine (P2P / NVLink aware) | Accepted |

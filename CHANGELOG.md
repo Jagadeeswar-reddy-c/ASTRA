@@ -5,6 +5,27 @@ versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-09-24 — Tensor-parallel split (ADR-0016); backplane PCB spec (CR-007)
+
+Study and measurements: docs/05-testing/reports/tensor-parallel-study.md.
+
+### Added
+- Tensor split inside one machine: `astra plan --split layer|tensor|auto`,
+  `--interconnect auto|host|p2p|nvlink`; llama.cpp `--split-mode tensor` and vLLM
+  `--tensor-parallel-size`. Speed model: slowest GPU's weight share + 2 all-reduces per
+  layer (host 45 us calibrated; P2P / NVLink estimated). Shares follow bandwidth, capped by
+  memory. Remote GPUs, quantized KV (llama.cpp) and indivisible head counts (vLLM) refused.
+- `astra auto --split auto`: on 2+ local GPUs it benchmarks the tensor split next to the
+  pipeline and keeps it only if >= 5 % faster.
+- Detection: `nvidia-smi topo -p2p r` P2P matrix and BAR1 size (Resizable BAR) in
+  `astra probe`; `astra compat` flags Resizable BAR off on multi-GPU hosts.
+- CR-007 and the backplane PCB requirements (ASTRA-HW-004): Gen4 P2P switch, 4 x16 slots,
+  per-slot eFuses and power sensors, MCU telemetry over USB. ADR-0016, FR-24/25,
+  TC-SW-30, TC-RT-13, TC-HW-14-16, risks R-16/R-17.
+
+### Changed
+- LIM-02 ("more GPUs, same speed") is no longer a hard limit inside one machine.
+
 ## [0.7.0] — 2026-09-24 — ASTRA Stack bricks in software (CR-006 S1-S3, S5)
 
 ### Added

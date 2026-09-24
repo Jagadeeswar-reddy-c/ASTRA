@@ -112,6 +112,7 @@ def parse_xml(xml_text: str) -> DriverReport:
                 active_clock_events=_clock_events(gpu),
                 power_max_limit_w=max_limit,
                 display_active=_display_active(gpu),
+                bar1_total_bytes=parse_bytes(_text(gpu, "bar1_memory_usage/total")),
             )
         )
 

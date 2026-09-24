@@ -30,7 +30,7 @@ UUID_3050 = "GPU-3050bbbb-0000-4000-8000-000000003050"
 
 
 class FakeRunner:
-    """Maps argv[0] to canned stdout (or an exception)."""
+    """Maps the full command line, else argv[0], to canned stdout (or an exception)."""
 
     def __init__(self, outputs: dict[str, str | Exception]) -> None:
         self.outputs = outputs
@@ -38,7 +38,7 @@ class FakeRunner:
 
     def run(self, argv: Sequence[str], timeout: float = 15.0) -> str:
         self.calls.append(list(argv))
-        out = self.outputs.get(argv[0])
+        out = self.outputs.get(" ".join(argv), self.outputs.get(argv[0]))
         if out is None:
             raise CommandError(f"{argv[0]} not found on PATH")
         if isinstance(out, Exception):

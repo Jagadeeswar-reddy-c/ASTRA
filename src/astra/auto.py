@@ -320,6 +320,7 @@ class AutoOptions:
     launch: bool = True
     ui: bool = True
     draft: str = "auto"  # auto | on | off
+    split: str = "auto"  # auto (measure tensor split on 2+ local GPUs) | layer | tensor
 
 
 def _post(url: str, body: dict[str, Any], timeout: float = 300) -> dict[str, Any]:
@@ -492,6 +493,20 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
         with_draft = exact_plan(draft_profile)
         if with_draft.fits and with_draft.draft is not None:
             variants.append(with_draft)
+    local = [b for b in the_pool.budgets if not b.is_remote]
+    if opts.split != "layer" and len(local) >= 2 and best.kv == "f16":
+        from astra.planner.tensor import detect_interconnect, plan_tensor
+
+        try:
+            tensor = plan_tensor(
+                profile, local, "llamacpp", opts.context, util, detect_interconnect(local)
+            )
+        except PlanningError as exc:
+            echo(f"    tensor split not possible: {exc}")
+        else:
+            gain = (tensor.est_decode_tokens_per_s or 0) / (base.est_decode_tokens_per_s or 1)
+            if tensor.fits and (opts.split == "tensor" or gain > 1.05):
+                variants.append(tensor)
     style = engines.spec_flag_style(_help_text(server))
     out.mkdir(parents=True, exist_ok=True)
 
@@ -517,7 +532,13 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
             )
             doc = variant.to_dict()
             doc["launch"] = {"argv": list(spec.argv), "env": spec.env, "notes": list(spec.notes)}
-            label = "with speculative decoding" if variant.draft else "baseline"
+            label = (
+                f"tensor split ({variant.interconnect})"
+                if variant.split_mode == "tensor"
+                else "with speculative decoding"
+                if variant.draft
+                else "baseline"
+            )
             if proc is not None:
                 _stop(proc)
             proc = _start(spec, out / f"llama-server-{i}.log", url)
@@ -528,20 +549,25 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
                 + (f", draft acceptance {bench.acceptance:.0%}" if bench.acceptance else "")
             )
             runs.append((variant, doc, bench))
-        final, plan_doc, bench = runs[0]
-        if len(runs) > 1 and runs[1][2].decode_tps >= runs[0][2].decode_tps * DRAFT_KEEP_GAIN:
-            final, plan_doc, bench = runs[1]
-            echo(
-                f"    keeping speculative decoding "
-                f"(+{(runs[1][2].decode_tps / runs[0][2].decode_tps - 1) * 100:.0f} %)"
-            )
-        elif len(runs) > 1:
-            echo("    speculative decoding did not pay off here; back to the baseline")
+        # Keep the fastest variant, but only if it beats the baseline by DRAFT_KEEP_GAIN.
+        base_tps = runs[0][2].decode_tps
+        pick = max(
+            range(len(runs)),
+            key=lambda i: runs[i][2].decode_tps * (1.0 if i == 0 else 1 / DRAFT_KEEP_GAIN),
+        )
+        final, plan_doc, bench = runs[pick]
+        if len(runs) > 1:
+            if pick == 0:
+                echo("    the alternatives did not pay off here; back to the baseline")
+            else:
+                what = "tensor split" if final.split_mode == "tensor" else "speculative decoding"
+                echo(f"    keeping {what} (+{(bench.decode_tps / base_tps - 1) * 100:.0f} %)")
+        if pick != len(runs) - 1:
             assert proc is not None
             _stop(proc)
-            base_spec = plan_doc["launch"]
+            spec_doc = plan_doc["launch"]
             proc = _start(
-                engines.LaunchSpec(tuple(base_spec["argv"]), base_spec["env"]),
+                engines.LaunchSpec(tuple(spec_doc["argv"]), spec_doc["env"]),
                 out / "llama-server.log",
                 url,
             )
@@ -549,19 +575,21 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
         echo(f"    engine healthy at {url}")
         measured = bench.decode_tps
         estimate = final.est_decode_tokens_per_s or 0
-        if final.draft is None:
+        if final.draft is None and pick == 0:
             delta = (measured - estimate) / estimate * 100 if estimate else 0.0
             echo(
                 f"    speed: {measured:.1f} tok/s measured vs ~{estimate:.0f} estimated "
                 f"({delta:+.0f} %)"
             )
         else:
-            # The estimate is for plain decoding; compare the baseline run against it.
-            base_measured = runs[0][2].decode_tps
-            delta = (base_measured - estimate) / estimate * 100 if estimate else 0.0
+            # Compare each estimate with its own run: tensor has its own model; a draft
+            # run is compared through its baseline (the estimate ignores the draft).
+            ref = runs[pick] if final.split_mode == "tensor" else runs[0]
+            estimate = ref[0].est_decode_tokens_per_s or 0
+            delta = (ref[2].decode_tps - estimate) / estimate * 100 if estimate else 0.0
             echo(
-                f"    speed: {measured:.1f} tok/s with speculative decoding; baseline "
-                f"{base_measured:.1f} vs ~{estimate:.0f} estimated ({delta:+.0f} %)"
+                f"    speed: {measured:.1f} tok/s kept; {ref[2].decode_tps:.1f} measured vs "
+                f"~{estimate:.0f} estimated for the {ref[0].split_mode} split ({delta:+.0f} %)"
             )
 
         def background_load() -> None:
@@ -587,6 +615,7 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
             "quant": best.quant,
             "kv_cache": best.kv,
             "draft": final.draft.name if final.draft else None,
+            "split_mode": final.split_mode,
             "context": opts.context,
             "layer_counts": list(final.layer_counts),
             "estimate_tok_s": round(estimate, 1),
@@ -594,7 +623,10 @@ def run(cfg: AstraConfig, opts: AutoOptions, echo: Echo = print) -> int:
             "delta_percent": round(delta, 1),
             "prefill_tok_s": round(bench.prefill_tps, 1),
             "ttft_2k_prompt_s": round(bench.ttft_2k_s, 2),
-            "runs": [{"draft": v.draft is not None, **b.to_dict()} for v, _, b in runs],
+            "runs": [
+                {"draft": v.draft is not None, "split_mode": v.split_mode, **b.to_dict()}
+                for v, _, b in runs
+            ],
             "runtime_gate": "PASS" if gate_ok else "FAIL",
         }
         (out / "results.json").write_text(json.dumps(result, indent=2), encoding="utf-8")

@@ -73,6 +73,14 @@ class GpuInfo:
     active_clock_events: tuple[str, ...] = ()
     power_max_limit_w: float | None = None
     display_active: bool | None = None
+    bar1_total_bytes: int | None = None  # PCIe BAR1 aperture; >= VRAM means Resizable BAR is on
+
+    @property
+    def resizable_bar(self) -> bool | None:
+        """True when BAR1 maps (nearly) all VRAM: needed for PCIe P2P via BAR1."""
+        if not self.bar1_total_bytes or not self.memory_total_bytes:
+            return None
+        return self.bar1_total_bytes >= self.memory_total_bytes * 0.9
 
     @property
     def short_bdf(self) -> str:
@@ -122,6 +130,8 @@ class Inventory:
     timestamp: float = 0.0
     # nvidia-smi topo -m: {(gpu index i, gpu index j): "PIX" | "PXB" | "PHB" | ...}, i < j
     gpu_links: dict[tuple[int, int], str] = field(default_factory=dict)
+    # nvidia-smi topo -p2p r: {(i, j): "OK" | "NS" | "CNS" | "GNS" | "TNS" | "DR" | "U"}, i < j
+    gpu_p2p: dict[tuple[int, int], str] = field(default_factory=dict)
 
     def gpu(self, uuid: str) -> GpuInfo | None:
         return next((g for g in self.gpus if g.uuid == uuid), None)
@@ -129,6 +139,7 @@ class Inventory:
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["gpu_links"] = {f"{i}-{j}": v for (i, j), v in self.gpu_links.items()}
+        data["gpu_p2p"] = {f"{i}-{j}": v for (i, j), v in self.gpu_p2p.items()}
         for uuid, path in self.paths.items():
             bottleneck = path.bottleneck
             data["paths"][uuid]["bottleneck"] = asdict(bottleneck) if bottleneck else None

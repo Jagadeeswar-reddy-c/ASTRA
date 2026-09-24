@@ -20,6 +20,8 @@ the node:
 | **Testing on real hardware (what to buy, step by step)** | [`docs/05-testing/field-test-plan.md`](docs/05-testing/field-test-plan.md) |
 | **Connecting more GPUs** (x16 / x8 / x4 / x1, risers, OCuLink, bifurcation, switch, network) | [`docs/03-solution-design/connecting-gpus.md`](docs/03-solution-design/connecting-gpus.md) |
 | **One-command test on your PC** | `powershell -ExecutionPolicy Bypass -File scripts\stage0-test.ps1` |
+| **Making several GPUs faster, not just bigger** (tensor split, P2P, NVLink) | [`docs/05-testing/reports/tensor-parallel-study.md`](docs/05-testing/reports/tensor-parallel-study.md) |
+| **Backplane PCB requirements** (CR-007) | [`docs/03-solution-design/backplane-pcb-spec.md`](docs/03-solution-design/backplane-pcb-spec.md) |
 | **Which GPUs to buy for a model and speed** (`astra size`) | `astra size --model llama-3.3-70b --min-tps 8` |
 | **Supported GPUs** (`astra gpus`) | [`docs/03-solution-design/supported-gpus.md`](docs/03-solution-design/supported-gpus.md) |
 | **Known limitations and backlog** | [`docs/01-requirements/limitations-and-backlog.md`](docs/01-requirements/limitations-and-backlog.md) |
@@ -105,7 +107,7 @@ of this, plus the PSU size, for any list of cards.
 |---|---|---|
 | 0 Governance / 1 Requirements | G0, G1 | Documented; awaiting sponsor sign-off |
 | 2 Architecture / 3 Solution design | G2, G3 | Documented; design review raised 20 findings (15 + 5 from CR-001) |
-| 4 Development | G4 | Control plane v0.6.0 (CR-001 any GPU mix, CR-003 fabric, CR-004 console, CR-005 automation, CR-006 stack sizing + bricks); 242 tests, 90 % coverage; CI green |
+| 4 Development | G4 | Control plane v0.6.0 (CR-001 any GPU mix, CR-003 fabric, CR-004 console, CR-005 automation, CR-006 stack sizing + bricks, ADR-0016 tensor split); 257 tests, 90 % coverage; CI green |
 | 5 Testing | G5 | Automated suite green; **Stage-0 field test PASS on real hardware** (speed estimate within 2–7 %, [report](docs/05-testing/reports/stage0-field-test.md)); chassis tests (TC-HW) pending |
 | 6 Deployment / 7 Operations | G6, G7 | Artefacts ready; pending hardware |
 

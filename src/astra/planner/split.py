@@ -136,6 +136,9 @@ class Plan:
     network_hop_s: float = NETWORK_HOP_S
     draft: ModelProfile | None = None  # speculative-decoding draft model
     draft_stage: int | None = None  # index into placements of the GPU holding the draft
+    split_mode: str = "layer"  # "layer" (pipeline) or "tensor" (ADR-0016)
+    allreduce_s: float = 0.0  # tensor mode: seconds per all-reduce between the GPUs
+    interconnect: str | None = None  # tensor mode: "host", "p2p" or "nvlink"
 
     @property
     def fits(self) -> bool:
@@ -159,7 +162,17 @@ class Plan:
 
     @property
     def est_decode_tokens_per_s(self) -> float | None:
+        if self.split_mode == "tensor":
+            return estimate_tensor_tps(self.placements, self.model.n_layers, self.allreduce_s)
         return estimate_decode_tps(self.placements, self.network_hop_s)
+
+    @property
+    def tensor_split(self) -> tuple[float, ...]:
+        """llama.cpp --tensor-split values: layers per GPU, or weight shares in tensor mode."""
+        if self.split_mode == "tensor":
+            total = sum(p.weight_bytes for p in self.placements) or 1
+            return tuple(p.weight_bytes / total for p in self.placements)
+        return tuple(float(n) for n in self.layer_counts)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -172,6 +185,8 @@ class Plan:
                 "weights_bytes": self.model.weights_bytes,
             },
             "engine": self.engine,
+            "split_mode": self.split_mode,
+            "interconnect": self.interconnect,
             "objective": self.objective,
             "est_decode_tokens_per_s": self.est_decode_tokens_per_s,
             "context": self.context,
@@ -250,6 +265,22 @@ def estimate_decode_tps(
         seconds += network_hop_s
     if placements and placements[-1].device.is_remote:
         seconds += network_hop_s
+    return 1.0 / seconds if seconds > 0 else None
+
+
+def estimate_tensor_tps(
+    placements: Sequence[Placement], n_layers: int, allreduce_s: float
+) -> float | None:
+    """Tensor split: all GPUs read their share at once (the slowest sets the pace), then
+    two all-reduces of the hidden state per layer (ADR-0016)."""
+    slowest = 0.0
+    for p in placements:
+        bw = p.device.bandwidth_gbps
+        if not bw:
+            return None
+        read = p.weight_bytes + p.fixed_bytes - p.draft_bytes + p.kv_bytes / 2
+        slowest = max(slowest, read / (bw * 1e9 * BANDWIDTH_EFFICIENCY))
+    seconds = slowest + 2 * n_layers * allreduce_s
     return 1.0 / seconds if seconds > 0 else None
 
 

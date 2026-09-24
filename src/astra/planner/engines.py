@@ -70,6 +70,12 @@ def llamacpp_devices(plan: Plan) -> tuple[list[str], list[str]]:
     return endpoints, devices
 
 
+def _split_values(plan: Plan) -> str:
+    if plan.split_mode == "tensor":
+        return ",".join(str(max(1, round(s * 1000))) for s in plan.tensor_split)
+    return ",".join(str(n) for n in plan.layer_counts)
+
+
 def llamacpp(
     plan: Plan,
     model_path: str,
@@ -88,9 +94,9 @@ def llamacpp(
         "--n-gpu-layers",
         str(plan.model.n_layers + 1),  # +1 offloads the output head too
         "--split-mode",
-        "layer",
+        plan.split_mode,
         "--tensor-split",
-        ",".join(str(n) for n in plan.layer_counts),
+        _split_values(plan),
         "--main-gpu",
         "0",
         "--ctx-size",
@@ -105,6 +111,13 @@ def llamacpp(
     if kv != "f16":
         # A quantized V cache needs flash attention.
         argv += ["--flash-attn", "on", "--cache-type-k", kv, "--cache-type-v", kv]
+    elif plan.split_mode == "tensor":
+        argv += ["--flash-attn", "on"]  # required by llama.cpp's tensor mode
+    if plan.split_mode == "tensor":
+        notes.append(
+            f"tensor split over {len(plan.placements)} GPUs ({plan.interconnect} all-reduce); "
+            "llama.cpp tensor mode is experimental and is fastest when built with GGML_CUDA_NCCL"
+        )
     endpoints, devices = llamacpp_devices(plan)
     if plan.draft is not None and plan.draft_stage is not None:
         argv += [
@@ -148,7 +161,8 @@ def vllm(
     model = model_ref or plan.model.hf_repo
     if not model:
         raise PlanningError("vLLM needs a Hugging Face model id; pass --model-ref")
-    stages = len(plan.placements)
+    tensor = plan.split_mode == "tensor"
+    stages = 1 if tensor else len(plan.placements)
     argv = [
         binary,
         "serve",
@@ -156,7 +170,7 @@ def vllm(
         "--pipeline-parallel-size",
         str(stages),
         "--tensor-parallel-size",
-        "1",
+        str(len(plan.placements) if tensor else 1),
         "--gpu-memory-utilization",
         f"{plan.gpu_memory_utilization:.2f}",
         "--max-model-len",

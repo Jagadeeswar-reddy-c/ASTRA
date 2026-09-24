@@ -131,6 +131,7 @@ LangChain, …) work the same way.
 | Keep downloads somewhere else | `astra auto --lab-dir D:\astra-lab` |
 | Verify and exit (no console) | `astra auto --no-ui` |
 | Try speculative decoding even on a fast GPU (kept only if faster) | `astra auto --draft on` |
+| With 2+ GPUs in this PC: pipeline only, or always try the tensor split | `astra auto --split layer` / `--split tensor` (default `auto` measures both) |
 | Plan what to buy for a bigger model | `astra size --model llama-3.3-70b --min-tps 8 --have "RTX 3060 Ti"` |
 | Just see your GPUs | `astra probe` · `astra gpus` · `astra compat` |
 
